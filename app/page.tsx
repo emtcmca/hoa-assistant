@@ -53,14 +53,18 @@ export default function Home() {
           Covenant
         </div>
         <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
-          {['Documents', 'Ask', 'Workflows'].map((item) => (
-            <a key={item} href="#" style={{
+{[
+  { label: 'Documents', href: '/documents' },
+  { label: 'Ask', href: '/ask' },
+  { label: 'Workflows', href: '/violations' },
+].map((item) => (
+  <a key={item.label} href={item.href} style={{
               fontSize: '13px',
               color: 'rgba(232,228,220,0.5)',
               textDecoration: 'none',
               letterSpacing: '0.03em',
             }}>
-              {item}
+              {item.label}
             </a>
           ))}
           <a href="/login" style={{
