@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../utils/supabase/client'
+import AppNavbar from '../components/AppNavbar'
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -35,103 +36,106 @@ interface HistoryEntry {
 }
 
 // ─────────────────────────────────────────────────────────────
-// DESIGN TOKENS
+// DESIGN TOKENS — light theme
 // ─────────────────────────────────────────────────────────────
 const c = {
-  bg:         '#0C1525',
-  bgCard:     'rgba(255,255,255,0.03)',
-  gold:       '#C4A054',
-  goldDim:    'rgba(196,160,84,0.15)',
-  goldBorder: 'rgba(196,160,84,0.25)',
-  text:       '#E8E4DC',
-  textDim:    'rgba(232,228,220,0.65)',
-  textFaint:  'rgba(232,228,220,0.4)',
-  border:     'rgba(255,255,255,0.07)',
-  green:      '#52B788',
-  amber:      '#F6AD55',
-  red:        '#FC8181',
+  bg:          '#F8F6F1',
+  surface:     '#FFFFFF',
+  text:        '#1A2535',
+  textMuted:   'rgba(26,37,53,0.55)',
+  textFaint:   'rgba(26,37,53,0.35)',
+  gold:        '#C4A054',
+  goldDim:     'rgba(196,160,84,0.10)',
+  goldBorder:  'rgba(196,160,84,0.25)',
+  border:      'rgba(26,37,53,0.08)',
+  shadow:      '0 2px 12px rgba(26,37,53,0.06), 0 1px 3px rgba(26,37,53,0.04)',
+  green:       '#2D6A4F',
+  greenDot:    '#40916C',
+  amber:       '#92400E',
+  amberDot:    '#D97706',
+  red:         '#7F1D1D',
+  redDot:      '#DC2626',
 }
 
-const confidenceColor: Record<string, string> = {
-  high:   c.green,
-  medium: c.amber,
-  low:    c.red,
+const confidenceColor: Record<string, { text: string; dot: string }> = {
+  high:   { text: c.green,  dot: c.greenDot },
+  medium: { text: c.amber,  dot: c.amberDot },
+  low:    { text: c.red,    dot: c.redDot   },
 }
 
 // ─────────────────────────────────────────────────────────────
 // EXPANDED ENTRY
 // ─────────────────────────────────────────────────────────────
 function ExpandedEntry({ entry }: { entry: HistoryEntry }) {
+  const labelStyle: React.CSSProperties = {
+    margin: '0 0 6px 0',
+    color: c.textFaint,
+    fontFamily: 'Instrument Sans, system-ui, sans-serif',
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
+  }
+
   return (
     <div style={{
       borderTop: `1px solid ${c.border}`,
       padding: '20px 24px',
-      background: 'rgba(0,0,0,0.15)',
+      background: 'rgba(26,37,53,0.02)',
     }}>
 
-      {/* Direct answer */}
       <div style={{ marginBottom: 16 }}>
-        <p style={{ margin: '0 0 6px 0', color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-          Direct Answer
-        </p>
-        <p style={{ margin: 0, color: c.text, fontFamily: 'DM Sans,sans-serif', fontSize: 14, lineHeight: 1.6 }}>
+        <p style={labelStyle}>Direct Answer</p>
+        <p style={{ margin: 0, color: c.text, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 14, lineHeight: 1.6 }}>
           {entry.direct_answer}
         </p>
       </div>
 
-      {/* Plain English */}
       <div style={{ marginBottom: 16 }}>
-        <p style={{ margin: '0 0 6px 0', color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-          Plain English
-        </p>
-        <p style={{ margin: 0, color: c.textDim, fontFamily: 'DM Sans,sans-serif', fontSize: 13, lineHeight: 1.7 }}>
+        <p style={labelStyle}>Plain English</p>
+        <p style={{ margin: 0, color: c.textMuted, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 13, lineHeight: 1.7 }}>
           {entry.plain_english_explanation}
         </p>
       </div>
 
-      {/* Citations */}
       {entry.citations.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <p style={{ margin: '0 0 10px 0', color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Sources ({entry.citations.length})
-          </p>
+          <p style={labelStyle}>Sources ({entry.citations.length})</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {entry.citations.map(cit => (
               <div key={cit.id} style={{
                 padding: '10px 14px',
-                background: c.bgCard,
+                background: c.surface,
                 border: `1px solid ${c.border}`,
                 borderRadius: 6,
                 borderLeft: `3px solid ${cit.evidence_role === 'primary' ? c.gold : c.border}`,
               }}>
-                {/* Label row */}
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                  <span style={{ color: cit.evidence_role === 'primary' ? c.gold : c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+                  <span style={{ color: cit.evidence_role === 'primary' ? c.gold : c.textFaint, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
                     {cit.evidence_role === 'primary' ? '★ Primary' : `Supporting ${cit.citation_order}`}
                   </span>
                   {cit.document_title && (
-                    <span style={{ color: c.textDim, fontFamily: 'DM Sans,sans-serif', fontSize: 11, fontWeight: 600 }}>
+                    <span style={{ color: c.text, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 11, fontWeight: 600 }}>
                       {cit.document_title}
                     </span>
                   )}
                   {cit.citation_label && (
-                    <span style={{ color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 11 }}>
+                    <span style={{ color: c.textMuted, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 11 }}>
                       · {cit.citation_label}
                     </span>
                   )}
                   {cit.heading && (
-                    <span style={{ color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 11, fontStyle: 'italic' }}>
+                    <span style={{ color: c.textMuted, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 11, fontStyle: 'italic' }}>
                       — {cit.heading}
                     </span>
                   )}
                   {cit.page_start && (
-                    <span style={{ color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 10 }}>
+                    <span style={{ color: c.textFaint, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 10 }}>
                       p. {cit.page_start}
                     </span>
                   )}
                 </div>
-                {/* Excerpt */}
-                <p style={{ margin: 0, color: c.textDim, fontFamily: 'DM Sans,sans-serif', fontSize: 12, lineHeight: 1.6 }}>
+                <p style={{ margin: 0, color: c.textMuted, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 12, lineHeight: 1.6 }}>
                   {cit.excerpt_text}
                 </p>
               </div>
@@ -140,15 +144,14 @@ function ExpandedEntry({ entry }: { entry: HistoryEntry }) {
         </div>
       )}
 
-      {/* Flags */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {entry.counsel_review_recommended && (
-          <span style={{ padding: '4px 10px', borderRadius: 4, background: 'rgba(252,129,129,0.1)', border: '1px solid rgba(252,129,129,0.3)', color: c.red, fontFamily: 'DM Sans,sans-serif', fontSize: 11 }}>
+          <span style={{ padding: '4px 10px', borderRadius: 4, background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#7F1D1D', fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 11 }}>
             Legal Review Recommended
           </span>
         )}
         {entry.has_hierarchy_conflict && (
-          <span style={{ padding: '4px 10px', borderRadius: 4, background: 'rgba(246,173,85,0.1)', border: '1px solid rgba(246,173,85,0.3)', color: c.amber, fontFamily: 'DM Sans,sans-serif', fontSize: 11 }}>
+          <span style={{ padding: '4px 10px', borderRadius: 4, background: 'rgba(217,119,6,0.08)', border: '1px solid rgba(217,119,6,0.2)', color: '#92400E', fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 11 }}>
             Document Conflict Detected
           </span>
         )}
@@ -171,7 +174,7 @@ function HistoryRow({
   onToggle: () => void
   onTogglePin: () => void
 }) {
-  const confColor = confidenceColor[entry.confidence_level] ?? c.textFaint
+  const conf = confidenceColor[entry.confidence_level] ?? { text: c.textFaint, dot: c.textFaint }
 
   const dateStr = new Date(entry.asked_at).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -180,64 +183,90 @@ function HistoryRow({
     hour: '2-digit', minute: '2-digit',
   })
 
+  const rowStyle: React.CSSProperties = {
+    border: `1px solid ${isExpanded ? c.goldBorder : c.border}`,
+    borderRadius: 8,
+    background: isExpanded ? 'rgba(196,160,84,0.03)' : c.surface,
+    overflow: 'hidden',
+    boxShadow: c.shadow,
+    transition: 'border-color 0.15s',
+  }
+
+  const rowInnerStyle: React.CSSProperties = {
+    padding: '16px 20px',
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 14,
+    cursor: 'pointer',
+  }
+
+  const questionStyle: React.CSSProperties = {
+    margin: '0 0 6px 0',
+    color: c.text,
+    fontFamily: 'Instrument Sans, system-ui, sans-serif',
+    fontSize: 14,
+    fontWeight: 500,
+    lineHeight: 1.4,
+  }
+
+  const metaStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+  }
+
+  const pinBtnStyle: React.CSSProperties = {
+    flexShrink: 0,
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: 16,
+    padding: '2px 6px',
+    color: entry.is_pinned ? c.gold : c.textFaint,
+    transition: 'color 0.15s',
+  }
+
+  const chevronStyle: React.CSSProperties = {
+    color: c.textFaint,
+    fontSize: 12,
+    flexShrink: 0,
+    marginTop: 2,
+    transition: 'transform 0.15s',
+    transform: isExpanded ? 'rotate(180deg)' : 'none',
+  }
+
   return (
-    <div style={{
-      border: `1px solid ${isExpanded ? c.goldBorder : c.border}`,
-      borderRadius: 8,
-      background: isExpanded ? 'rgba(196,160,84,0.04)' : c.bgCard,
-      overflow: 'hidden',
-      transition: 'border-color 0.15s, background 0.15s',
-    }}>
-      <div
-        onClick={onToggle}
-        style={{
-          padding: '16px 20px',
-          display: 'flex', alignItems: 'flex-start', gap: 14,
-          cursor: 'pointer',
-        }}
-      >
-        {/* Confidence dot */}
+    <div style={rowStyle}>
+      <div onClick={onToggle} style={rowInnerStyle}>
         <div style={{ marginTop: 5, flexShrink: 0 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: confColor }} />
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: conf.dot }} />
         </div>
 
-        {/* Question + meta */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: '0 0 6px 0', color: c.text, fontFamily: 'DM Sans,sans-serif', fontSize: 14, fontWeight: 500, lineHeight: 1.4 }}>
-            {entry.question_text}
-          </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 11 }}>
+          <p style={questionStyle}>{entry.question_text}</p>
+          <div style={metaStyle}>
+            <span style={{ color: c.textFaint, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 11 }}>
               {dateStr} · {timeStr}
             </span>
-            <span style={{ color: confColor, fontFamily: 'DM Sans,sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <span style={{ color: conf.text, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {entry.confidence_level}
             </span>
-            <span style={{ color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 11 }}>
+            <span style={{ color: c.textFaint, fontFamily: 'Instrument Sans, system-ui, sans-serif', fontSize: 11 }}>
               {entry.citations.length} source{entry.citations.length !== 1 ? 's' : ''}
             </span>
           </div>
         </div>
 
-        {/* Pin button */}
         <button
           onClick={e => { e.stopPropagation(); onTogglePin() }}
           title={entry.is_pinned ? 'Unpin' : 'Pin this answer'}
-          style={{
-            flexShrink: 0,
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: 16, padding: '2px 6px',
-            color: entry.is_pinned ? c.gold : c.textFaint,
-            transition: 'color 0.15s',
-          }}
+          style={pinBtnStyle}
         >
           {entry.is_pinned ? '★' : '☆'}
         </button>
 
-        {/* Chevron */}
-        <span style={{ color: c.textFaint, fontSize: 12, flexShrink: 0, marginTop: 2, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>
-          ▾
-        </span>
+        <span style={chevronStyle}>▾</span>
       </div>
 
       {isExpanded && <ExpandedEntry entry={entry} />}
@@ -248,34 +277,35 @@ function HistoryRow({
 // ─────────────────────────────────────────────────────────────
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────
+const supabase = createClient()
+
 export default function HistoryPage() {
   const router = useRouter()
-  const supabase = createClient()
 
-  const [entries, setEntries]               = useState<HistoryEntry[]>([])
-  const [loading, setLoading]               = useState(true)
-  const [error, setError]                   = useState<string | null>(null)
-  const [expandedId, setExpandedId]         = useState<string | null>(null)
-  const [search, setSearch]                 = useState('')
-  const [filter, setFilter]                 = useState<'all' | 'pinned'>('all')
-  const [associationName, setAssociationName] = useState('')
+  const [entries, setEntries]       = useState<HistoryEntry[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [search, setSearch]         = useState('')
+  const [filter, setFilter]         = useState<'all' | 'pinned'>('all')
 
   useEffect(() => {
     async function load() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { router.push('/login'); return }
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
 
       const { data: memberships } = await supabase
         .from('association_memberships')
-        .select('association_id, associations(id, display_name)')
-        .eq('user_id', session.user.id)
+        .select('association_id')
+        .eq('user_id', user.id)
         .limit(1)
 
-      const membership = memberships?.[0]
-      const assocRaw = membership?.associations as any
-      const assoc = Array.isArray(assocRaw) ? assocRaw[0] : assocRaw
-      if (assoc) setAssociationName(assoc.display_name)
-      const associationId = assoc?.id
+      const associationId = memberships?.[0]?.association_id
+      if (!associationId) {
+        setError('No association found for your account.')
+        setLoading(false)
+        return
+      }
 
       if (!associationId) {
         setError('No association found for your account.')
@@ -381,46 +411,89 @@ export default function HistoryPage() {
 
   const pinnedCount = entries.filter(e => e.is_pinned).length
 
+  const pageStyle: React.CSSProperties = {
+    minHeight: '100vh',
+    background: c.bg,
+    fontFamily: 'Instrument Sans, system-ui, sans-serif',
+  }
+
+  const mainStyle: React.CSSProperties = {
+    maxWidth: 860,
+    margin: '0 auto',
+    padding: '40px 40px 80px',
+  }
+
+  const headingStyle: React.CSSProperties = {
+    margin: '0 0 6px 0',
+    color: c.text,
+    fontFamily: 'Cormorant Garamond, serif',
+    fontSize: 36,
+    fontWeight: 700,
+    lineHeight: 1.1,
+  }
+
+  const subheadStyle: React.CSSProperties = {
+    margin: '0 0 28px 0',
+    color: c.textFaint,
+    fontSize: 14,
+  }
+
+  const searchStyle: React.CSSProperties = {
+    flex: 1,
+    padding: '10px 16px',
+    background: c.surface,
+    border: `1px solid ${c.border}`,
+    borderRadius: 8,
+    color: c.text,
+    fontFamily: 'Instrument Sans, system-ui, sans-serif',
+    fontSize: 14,
+    outline: 'none',
+  }
+
+  const filterBtnBase: React.CSSProperties = {
+    padding: '8px 18px',
+    borderRadius: 6,
+    fontFamily: 'Instrument Sans, system-ui, sans-serif',
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'background 0.15s, color 0.15s',
+  }
+
+  const filterAllStyle: React.CSSProperties = {
+    ...filterBtnBase,
+    background: filter === 'all' ? c.gold : c.surface,
+    color: filter === 'all' ? '#FFFFFF' : c.textMuted,
+    border: filter === 'all' ? 'none' : `1px solid ${c.border}`,
+  }
+
+  const filterPinnedStyle: React.CSSProperties = {
+    ...filterBtnBase,
+    background: filter === 'pinned' ? c.gold : c.surface,
+    color: filter === 'pinned' ? '#FFFFFF' : c.textMuted,
+    border: filter === 'pinned' ? 'none' : `1px solid ${c.border}`,
+  }
+
+  if (loading) {
+    return (
+      <div style={pageStyle}>
+        <AppNavbar />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
+          <p style={{ color: c.textFaint, fontSize: 14 }}>Loading history…</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div style={{ minHeight: '100vh', background: c.bg, display: 'flex', flexDirection: 'column' }}>
+    <div style={pageStyle}>
+      <AppNavbar />
 
-      {/* Header */}
-      <header style={{
-        padding: '16px 32px',
-        borderBottom: `1px solid ${c.border}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: 'rgba(12,21,37,0.95)',
-        position: 'sticky', top: 0, zIndex: 10,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ color: c.gold, fontFamily: 'DM Sans,sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Answer History
-          </span>
-          <span style={{ color: c.border }}>|</span>
-          <span style={{ color: c.textDim, fontFamily: 'Cormorant Garamond,serif', fontSize: 16 }}>
-            {associationName}
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <a href="/meeting-mode" style={{ color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 12, textDecoration: 'none' }}>
-            ← Meeting Mode
-          </a>
-          <a href="/dashboard" style={{ color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 12, textDecoration: 'none' }}>
-            Dashboard
-          </a>
-        </div>
-      </header>
-
-      {/* Main */}
-      <main style={{ flex: 1, maxWidth: 860, width: '100%', margin: '0 auto', padding: '40px 24px' }}>
+      <div style={mainStyle}>
 
         <div style={{ marginBottom: 32 }}>
-          <h1 style={{ margin: '0 0 6px 0', color: c.text, fontFamily: 'Cormorant Garamond,serif', fontSize: 32, fontWeight: 600 }}>
-            Answer History
-          </h1>
-          <p style={{ margin: '0 0 24px 0', color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 13 }}>
-            All questions asked and answers returned for this association.
-          </p>
+          <h1 style={headingStyle}>Answer History</h1>
+          <p style={subheadStyle}>All questions asked and answers returned for this association.</p>
 
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <input
@@ -428,107 +501,47 @@ export default function HistoryPage() {
               placeholder="Search questions…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{
-                flex: 1, minWidth: 200,
-                padding: '9px 14px',
-                background: 'rgba(255,255,255,0.04)',
-                border: `1px solid ${c.border}`,
-                borderRadius: 6,
-                color: c.text,
-                fontFamily: 'DM Sans,sans-serif', fontSize: 13,
-                outline: 'none',
-              }}
+              style={searchStyle}
             />
-            <button
-              onClick={() => setFilter('all')}
-              style={{
-                padding: '9px 16px', borderRadius: 6,
-                border: `1px solid ${filter === 'all' ? c.goldBorder : c.border}`,
-                background: filter === 'all' ? c.goldDim : 'transparent',
-                color: filter === 'all' ? c.gold : c.textFaint,
-                fontFamily: 'DM Sans,sans-serif', fontSize: 12, fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
+            <button onClick={() => setFilter('all')} style={filterAllStyle}>
               All ({entries.length})
             </button>
-            <button
-              onClick={() => setFilter('pinned')}
-              style={{
-                padding: '9px 16px', borderRadius: 6,
-                border: `1px solid ${filter === 'pinned' ? c.goldBorder : c.border}`,
-                background: filter === 'pinned' ? c.goldDim : 'transparent',
-                color: filter === 'pinned' ? c.gold : c.textFaint,
-                fontFamily: 'DM Sans,sans-serif', fontSize: 12, fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
+            <button onClick={() => setFilter('pinned')} style={filterPinnedStyle}>
               ★ Pinned ({pinnedCount})
             </button>
           </div>
         </div>
 
-        {loading && (
-          <p style={{ color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 13 }}>Loading history…</p>
-        )}
         {error && (
-          <p style={{ color: c.red, fontFamily: 'DM Sans,sans-serif', fontSize: 13 }}>{error}</p>
+          <div style={{ padding: '12px 16px', background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, color: '#DC2626', fontSize: 14, marginBottom: 24 }}>
+            {error}
+          </div>
         )}
-        {!loading && !error && visible.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <p style={{ color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 14 }}>
-              {filter === 'pinned'
-                ? 'No pinned answers yet. Star an answer to pin it.'
-                : 'No questions asked yet. Head to Meeting Mode to get started.'}
+
+        {visible.length === 0 ? (
+          <div style={{ padding: '60px 40px', textAlign: 'center', background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, boxShadow: c.shadow }}>
+            <p style={{ color: c.text, fontSize: 16, fontWeight: 500, marginBottom: 8 }}>
+              {filter === 'pinned' ? 'No pinned answers yet.' : 'No questions found.'}
             </p>
-            <a href="/meeting-mode" style={{ color: c.gold, fontFamily: 'DM Sans,sans-serif', fontSize: 13, textDecoration: 'none' }}>
-              Go to Meeting Mode →
-            </a>
+            <p style={{ color: c.textFaint, fontSize: 13 }}>
+              {filter === 'pinned' ? 'Pin answers from Meeting Mode to save them here.' : 'Questions asked in Meeting Mode will appear here.'}
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {visible.map(entry => (
+              <HistoryRow
+                key={entry.session_id}
+                entry={entry}
+                isExpanded={expandedId === entry.session_id}
+                onToggle={() => setExpandedId(expandedId === entry.session_id ? null : entry.session_id)}
+                onTogglePin={() => togglePin(entry)}
+              />
+            ))}
           </div>
         )}
 
-        {!loading && !error && visible.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-            {filter === 'all' && pinnedCount > 0 && (
-              <p style={{ margin: '0 0 4px 0', color: c.gold, fontFamily: 'DM Sans,sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                ★ Pinned
-              </p>
-            )}
-
-            {visible
-              .filter(e => filter === 'all' ? e.is_pinned : true)
-              .map(e => (
-                <HistoryRow
-                  key={e.answer_id}
-                  entry={e}
-                  isExpanded={expandedId === e.answer_id}
-                  onToggle={() => setExpandedId(prev => prev === e.answer_id ? null : e.answer_id)}
-                  onTogglePin={() => togglePin(e)}
-                />
-              ))}
-
-            {filter === 'all' && entries.filter(e => !e.is_pinned).length > 0 && (
-              <>
-                {pinnedCount > 0 && (
-                  <p style={{ margin: '12px 0 4px 0', color: c.textFaint, fontFamily: 'DM Sans,sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                    All Questions
-                  </p>
-                )}
-                {entries.filter(e => !e.is_pinned).map(e => (
-                  <HistoryRow
-                    key={e.answer_id}
-                    entry={e}
-                    isExpanded={expandedId === e.answer_id}
-                    onToggle={() => setExpandedId(prev => prev === e.answer_id ? null : e.answer_id)}
-                    onTogglePin={() => togglePin(e)}
-                  />
-                ))}
-              </>
-            )}
-          </div>
-        )}
-      </main>
+      </div>
     </div>
   )
 }

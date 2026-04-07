@@ -17,30 +17,47 @@ interface SessionEntry {
 }
 
 const colors = {
-  bg:           "#0C1525",
-  bgCard:       "rgba(255,255,255,0.025)",
-  gold:         "#C4A054",
-  goldDim:      "rgba(196,160,84,0.15)",
-  goldBorder:   "rgba(196,160,84,0.2)",
-  text:         "#E8E4DC",
-  textDim:      "rgba(232,228,220,0.65)",
-  textFaint:    "rgba(232,228,220,0.4)",
-  border:       "rgba(255,255,255,0.07)",
+  bg:          "#F4F2ED",
+  bgLeftPanel: "#ECEAE4",
+  bgCard:      "#FFFFFF",
+  gold:        "#C4A054",
+  goldDim:     "rgba(196,160,84,0.12)",
+  goldBorder:  "rgba(196,160,84,0.25)",
+  text:        "#1A2535",
+  textMuted:   "rgba(26,37,53,0.55)",
+  textFaint:   "rgba(26,37,53,0.35)",
+  border:      "rgba(26,37,53,0.08)",
+  borderInput: "rgba(26,37,53,0.14)",
+  white:       "#FFFFFF",
 };
 
 function LoadingSpinner() {
+  const containerStyle: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "60px 20px",
+    gap: 20,
+  };
+  const spinnerStyle: React.CSSProperties = {
+    width: 40,
+    height: 40,
+    border: `3px solid ${colors.goldDim}`,
+    borderTop: `3px solid ${colors.gold}`,
+    borderRadius: "50%",
+    animation: "spin 0.8s linear infinite",
+  };
+  const labelStyle: React.CSSProperties = {
+    margin: 0,
+    color: colors.textFaint,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 13,
+  };
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"60px 20px", gap:20 }}>
-      <div style={{
-        width: 40, height: 40,
-        border: `3px solid ${colors.goldDim}`,
-        borderTop: `3px solid ${colors.gold}`,
-        borderRadius: "50%",
-        animation: "spin 0.8s linear infinite",
-      }} />
-      <p style={{ margin:0, color:colors.textFaint, fontFamily:"'DM Sans',sans-serif", fontSize:13 }}>
-        Searching governing documents...
-      </p>
+    <div style={containerStyle}>
+      <div style={spinnerStyle} />
+      <p style={labelStyle}>Searching governing documents...</p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
@@ -55,31 +72,64 @@ function EmptyState() {
     "What is the process for approving an architectural change?",
   ];
 
+  const containerStyle: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "60px 32px",
+    gap: 24,
+    border: `1px dashed ${colors.goldBorder}`,
+    borderRadius: 10,
+    background: "rgba(196,160,84,0.03)",
+  };
+  const headingStyle: React.CSSProperties = {
+    margin: "0 0 8px 0",
+    color: colors.gold,
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: 22,
+    fontWeight: 600,
+  };
+  const subStyle: React.CSSProperties = {
+    margin: 0,
+    color: colors.textMuted,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 13,
+    lineHeight: 1.6,
+  };
+  const labelStyle: React.CSSProperties = {
+    margin: "0 0 10px 0",
+    color: colors.textFaint,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+  };
+
   return (
-    <div style={{
-      display:"flex", flexDirection:"column", alignItems:"center",
-      justifyContent:"center", padding:"60px 32px", gap:24,
-      border: `1px dashed ${colors.goldBorder}`,
-      borderRadius:10, background:"rgba(196,160,84,0.02)",
-    }}>
-      <div style={{ textAlign:"center" }}>
-        <p style={{ margin:"0 0 8px 0", color:colors.gold, fontFamily:"'Cormorant Garamond',serif", fontSize:22, fontWeight:600 }}>
-          Ask a governing document question
-        </p>
-        <p style={{ margin:0, color:colors.textFaint, fontFamily:"'DM Sans',sans-serif", fontSize:13, lineHeight:1.6 }}>
-          Type a plain-English question or paste an owner message. The system will search your association's
-          governing documents and return a cited answer in seconds.
+    <div style={containerStyle}>
+      <div style={{ textAlign: "center" }}>
+        <p style={headingStyle}>Ask a governing document question</p>
+        <p style={subStyle}>
+          Type a plain-English question or paste an owner message. The system will search your
+          association's governing documents and return a cited answer in seconds.
         </p>
       </div>
-      <div style={{ width:"100%", maxWidth:480 }}>
-        <p style={{ margin:"0 0 10px 0", color:colors.textFaint, fontFamily:"'DM Sans',sans-serif", fontSize:10, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" }}>
-          Example questions
-        </p>
-        {examples.map((ex, i) => (
-          <p key={i} style={{ margin:"0 0 6px 0", color:colors.textDim, fontFamily:"'DM Sans',sans-serif", fontSize:12, lineHeight:1.5, paddingLeft:10, borderLeft:`2px solid ${colors.goldBorder}` }}>
-            {ex}
-          </p>
-        ))}
+      <div style={{ width: "100%", maxWidth: 480 }}>
+        <p style={labelStyle}>Example questions</p>
+        {examples.map((ex, i) => {
+          const exStyle: React.CSSProperties = {
+            margin: "0 0 6px 0",
+            color: colors.textMuted,
+            fontFamily: "'Instrument Sans', system-ui, sans-serif",
+            fontSize: 12,
+            lineHeight: 1.5,
+            paddingLeft: 10,
+            borderLeft: `2px solid ${colors.goldBorder}`,
+          };
+          return <p key={i} style={exStyle}>{ex}</p>;
+        })}
       </div>
     </div>
   );
@@ -95,44 +145,71 @@ function HistoryItem({
   onClick: () => void;
 }) {
   const confidenceColorMap: Record<"high" | "medium" | "low", string> = {
-    high:   "#52B788",
-    medium: "#F6AD55",
-    low:    "#FC8181",
+    high:   "#40916C",
+    medium: "#D97706",
+    low:    "#DC2626",
   };
-  const confidenceColor = confidenceColorMap[entry.answer.confidence_level as "high" | "medium" | "low"] ?? "#94A3B8";
+  const confidenceColor =
+    confidenceColorMap[entry.answer.confidence_level as "high" | "medium" | "low"] ?? "#94A3B8";
+
+  const btnStyle: React.CSSProperties = {
+    width: "100%",
+    textAlign: "left",
+    padding: "10px 12px",
+    borderRadius: 6,
+    background: isActive ? colors.goldDim : "transparent",
+    border: isActive ? `1px solid ${colors.goldBorder}` : "1px solid transparent",
+    cursor: "pointer",
+    transition: "background 0.15s, border-color 0.15s",
+  };
+  const qStyle: React.CSSProperties = {
+    margin: "0 0 4px 0",
+    color: isActive ? colors.text : colors.textMuted,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 12,
+    fontWeight: 500,
+    lineHeight: 1.4,
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+  };
+  const metaStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  };
+  const dotStyle: React.CSSProperties = {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: confidenceColor,
+    flexShrink: 0,
+  };
+  const timeStyle: React.CSSProperties = {
+    color: colors.textFaint,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 10,
+  };
 
   return (
     <button
       onClick={onClick}
-      style={{
-        width:"100%", textAlign:"left",
-        padding:"10px 12px",
-        borderRadius:6,
-        background: isActive ? colors.goldDim : "transparent",
-        border: isActive ? `1px solid ${colors.goldBorder}` : "1px solid transparent",
-        cursor:"pointer",
-        transition:"background 0.15s, border-color 0.15s",
-      }}
+      style={btnStyle}
       onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-        if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+        if (!isActive) e.currentTarget.style.background = "rgba(26,37,53,0.04)";
       }}
       onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
         if (!isActive) e.currentTarget.style.background = "transparent";
       }}
     >
-      <p style={{
-        margin:"0 0 4px 0", color:isActive ? colors.text : colors.textDim,
-        fontFamily:"'DM Sans',sans-serif", fontSize:12, fontWeight:500, lineHeight:1.4,
-        overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
-      }}>
-        {entry.question_text}
-      </p>
-      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-        <span style={{ width:6, height:6, borderRadius:"50%", background:confidenceColor, flexShrink:0 }} />
-        <span style={{ color:colors.textFaint, fontFamily:"'DM Sans',sans-serif", fontSize:10 }}>
-          {entry.asked_at.toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}
+      <p style={qStyle}>{entry.question_text}</p>
+      <div style={metaStyle}>
+        <span style={dotStyle} />
+        <span style={timeStyle}>
+          {entry.asked_at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </span>
-        <span style={{ color:colors.textFaint, fontFamily:"'DM Sans',sans-serif", fontSize:10 }}>
+        <span style={timeStyle}>
           {" "}· {entry.citations.length} source{entry.citations.length !== 1 ? "s" : ""}
         </span>
       </div>
@@ -173,7 +250,7 @@ export default function MeetingModePage() {
 
       const { data: memberships, error: membershipError } = await supabase
         .from("association_memberships")
-        .select("association_id, associations(id, display_name)")
+        .select("association_id, associations(id, name)")
         .eq("user_id", session.user.id)
         .limit(1);
 
@@ -201,7 +278,7 @@ export default function MeetingModePage() {
       }
 
       setAssociationId(assoc.id);
-      setAssociationName(assoc.display_name);
+      setAssociationName(assoc.name);
       setAuthLoading(false);
 
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -248,7 +325,6 @@ export default function MeetingModePage() {
       setSessionHistory(prev => [entry, ...prev]);
       setActiveEntryId(entry.id);
       setQuestion("");
-
     } catch (err) {
       console.error("Ask error:", err);
       setError("Network error. Please check your connection and try again.");
@@ -286,42 +362,226 @@ export default function MeetingModePage() {
   }
 
   if (authLoading) {
-    return (
-      <div style={{ minHeight:"100vh", background:colors.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
-        <LoadingSpinner />
-      </div>
-    );
+    const loadingPageStyle: React.CSSProperties = {
+      minHeight: "100vh",
+      background: colors.bg,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    };
+    return <div style={loadingPageStyle}><LoadingSpinner /></div>;
   }
 
-  return (
-    <div style={{ minHeight:"100vh", background:colors.bg, display:"flex", flexDirection:"column" }}>
+  const pageStyle: React.CSSProperties = {
+    minHeight: "100vh",
+    background: colors.bg,
+    display: "flex",
+    flexDirection: "column",
+  };
 
-      <header style={{
-        padding:"16px 32px",
-        borderBottom:`1px solid ${colors.border}`,
-        display:"flex", alignItems:"center", justifyContent:"space-between",
-        background:"rgba(12,21,37,0.95)",
-        position:"sticky", top:0, zIndex:10,
-      }}>
-        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{
-              width:8, height:8, borderRadius:"50%",
-              background:colors.gold, display:"inline-block",
-              animation:"pulse 2s ease-in-out infinite",
-            }} />
-            <span style={{ color:colors.gold, fontFamily:"'DM Sans',sans-serif", fontSize:11, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" }}>
-              Meeting Mode
-            </span>
+  const headerStyle: React.CSSProperties = {
+    padding: "14px 32px",
+    borderBottom: `1px solid ${colors.border}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    background: colors.white,
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+    boxShadow: "0 1px 3px rgba(26,37,53,0.06)",
+  };
+
+  const meetingLabelRowStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+  };
+
+  const meetingBadgeStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  };
+
+  const pulseDotStyle: React.CSSProperties = {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "#40916C",
+    display: "inline-block",
+    animation: "pulse 2s ease-in-out infinite",
+  };
+
+  const meetingLabelStyle: React.CSSProperties = {
+    color: "#2D6A4F",
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+  };
+
+  const dividerStyle: React.CSSProperties = {
+    color: colors.border,
+  };
+
+  const assocNameStyle: React.CSSProperties = {
+    color: colors.textMuted,
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: 16,
+  };
+
+  const exitLinkStyle: React.CSSProperties = {
+    color: colors.textFaint,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 12,
+    textDecoration: "none",
+    transition: "color 0.15s",
+  };
+
+  const mainStyle: React.CSSProperties = {
+    flex: 1,
+    display: "flex",
+    gap: 0,
+    overflow: "hidden",
+  };
+
+  const leftPanelStyle: React.CSSProperties = {
+    width: 360,
+    flexShrink: 0,
+    borderRight: `1px solid ${colors.border}`,
+    display: "flex",
+    flexDirection: "column",
+    height: "calc(100vh - 57px)",
+    background: colors.bgLeftPanel,
+  };
+
+  const inputAreaStyle: React.CSSProperties = {
+    padding: "24px 20px",
+    borderBottom: `1px solid ${colors.border}`,
+  };
+
+  const inputLabelStyle: React.CSSProperties = {
+    display: "block",
+    color: colors.textFaint,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+    marginBottom: 10,
+  };
+
+  const textareaStyle: React.CSSProperties = {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "12px 14px",
+    background: colors.white,
+    border: `1px solid ${question.trim() ? colors.goldBorder : colors.borderInput}`,
+    borderRadius: 6,
+    color: colors.text,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 13,
+    lineHeight: 1.6,
+    resize: "none",
+    outline: "none",
+    transition: "border-color 0.15s",
+    caretColor: colors.gold,
+  };
+
+  const errorStyle: React.CSSProperties = {
+    margin: "8px 0 0 0",
+    color: "#DC2626",
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 12,
+  };
+
+  const askBtnStyle: React.CSSProperties = {
+    marginTop: 10,
+    width: "100%",
+    padding: "11px 0",
+    background: question.trim() && !isLoading ? colors.gold : colors.goldDim,
+    border: "none",
+    borderRadius: 6,
+    color: question.trim() && !isLoading ? "#FFFFFF" : colors.textFaint,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: question.trim() && !isLoading ? "pointer" : "not-allowed",
+    transition: "background 0.15s, color 0.15s",
+    letterSpacing: "0.03em",
+  };
+
+  const historyScrollStyle: React.CSSProperties = {
+    flex: 1,
+    overflowY: "auto",
+    padding: "16px 12px",
+  };
+
+  const sessionLabelStyle: React.CSSProperties = {
+    margin: "0 0 10px 8px",
+    color: colors.textFaint,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+  };
+
+  const emptyHistoryStyle: React.CSSProperties = {
+    margin: 0,
+    padding: "12px 8px",
+    color: colors.textFaint,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 12,
+    lineHeight: 1.6,
+  };
+
+  const rightPanelStyle: React.CSSProperties = {
+    flex: 1,
+    overflowY: "auto",
+    padding: "32px",
+    background: colors.bg,
+  };
+
+  const questionPrefixStyle: React.CSSProperties = {
+    margin: "0 0 16px 0",
+    color: colors.textMuted,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 13,
+  };
+
+  const draftBtnStyle: React.CSSProperties = {
+    padding: "0.625rem 1.25rem",
+    background: colors.goldDim,
+    border: `1px solid ${colors.goldBorder}`,
+    borderRadius: "6px",
+    color: colors.gold,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: "0.8rem",
+    fontWeight: 600,
+    cursor: "pointer",
+    letterSpacing: "0.03em",
+    transition: "background 0.15s",
+  };
+
+return (
+    <div style={pageStyle}>
+
+      <header style={headerStyle}>
+        <div style={meetingLabelRowStyle}>
+          <div style={meetingBadgeStyle}>
+            <span style={pulseDotStyle} />
+            <span style={meetingLabelStyle}>Meeting Mode</span>
           </div>
-          <span style={{ color:colors.border }}>|</span>
-          <span style={{ color:colors.textDim, fontFamily:"'Cormorant Garamond',serif", fontSize:16 }}>
-            {associationName}
-          </span>
+          <span style={dividerStyle}>|</span>
+          <span style={assocNameStyle}>{associationName}</span>
         </div>
+        
         <a
           href="/dashboard"
-          style={{ color:colors.textFaint, fontFamily:"'DM Sans',sans-serif", fontSize:12, textDecoration:"none", transition:"color 0.15s" }}
+          style={exitLinkStyle}
           onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.color = colors.text; }}
           onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.color = colors.textFaint; }}
         >
@@ -329,25 +589,11 @@ export default function MeetingModePage() {
         </a>
       </header>
 
-      <main style={{ flex:1, display:"flex", gap:0, overflow:"hidden" }}>
+      <main style={mainStyle}>
 
-        <div style={{
-          width:360, flexShrink:0,
-          borderRight:`1px solid ${colors.border}`,
-          display:"flex", flexDirection:"column",
-          height:"calc(100vh - 57px)",
-        }}>
-
-          <div style={{ padding:"24px 20px", borderBottom:`1px solid ${colors.border}` }}>
-            <label style={{
-              display:"block", color:colors.textFaint,
-              fontFamily:"'DM Sans',sans-serif", fontSize:10,
-              fontWeight:700, letterSpacing:"0.1em",
-              textTransform:"uppercase", marginBottom:10,
-            }}>
-              Ask a Question
-            </label>
-
+        <div style={leftPanelStyle}>
+          <div style={inputAreaStyle}>
+            <label style={inputLabelStyle}>Ask a Question</label>
             <textarea
               ref={inputRef}
               value={question}
@@ -356,51 +602,22 @@ export default function MeetingModePage() {
               placeholder={"Ask a question or paste an owner message...\n\nShift+Enter for new line, Enter to ask."}
               disabled={isLoading}
               rows={4}
-              style={{
-                width:"100%", boxSizing:"border-box",
-                padding:"12px 14px",
-                background:"rgba(255,255,255,0.04)",
-                border:`1px solid ${question.trim() ? colors.goldBorder : colors.border}`,
-                borderRadius:6,
-                color:colors.text,
-                fontFamily:"'DM Sans',sans-serif", fontSize:13, lineHeight:1.6,
-                resize:"none", outline:"none",
-                transition:"border-color 0.15s",
-                caretColor:colors.gold,
-              }}
+              style={textareaStyle}
             />
-
-            {error && (
-              <p style={{ margin:"8px 0 0 0", color:"#FC8181", fontFamily:"'DM Sans',sans-serif", fontSize:12 }}>
-                {error}
-              </p>
-            )}
-
+            {error && <p style={errorStyle}>{error}</p>}
             <button
               onClick={handleAsk}
               disabled={!question.trim() || isLoading}
-              style={{
-                marginTop:10, width:"100%",
-                padding:"11px 0",
-                background: question.trim() && !isLoading ? colors.gold : colors.goldDim,
-                border:"none", borderRadius:6,
-                color: question.trim() && !isLoading ? "#0C1525" : colors.textFaint,
-                fontFamily:"'DM Sans',sans-serif", fontSize:13, fontWeight:700,
-                cursor: question.trim() && !isLoading ? "pointer" : "not-allowed",
-                transition:"background 0.15s, color 0.15s",
-                letterSpacing:"0.03em",
-              }}
+              style={askBtnStyle}
             >
               {isLoading ? "Searching..." : "Ask"}
             </button>
           </div>
 
-          <div style={{ flex:1, overflowY:"auto", padding:"16px 12px" }}>
+          <div style={historyScrollStyle}>
             {sessionHistory.length > 0 ? (
               <>
-                <p style={{ margin:"0 0 10px 8px", color:colors.textFaint, fontFamily:"'DM Sans',sans-serif", fontSize:10, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" }}>
-                  This Session ({sessionHistory.length})
-                </p>
+                <p style={sessionLabelStyle}>This Session ({sessionHistory.length})</p>
                 {sessionHistory.map(entry => (
                   <HistoryItem
                     key={entry.id}
@@ -414,54 +631,37 @@ export default function MeetingModePage() {
                 ))}
               </>
             ) : (
-              <p style={{ margin:0, padding:"12px 8px", color:colors.textFaint, fontFamily:"'DM Sans',sans-serif", fontSize:12, lineHeight:1.6 }}>
+              <p style={emptyHistoryStyle}>
                 Questions asked this session will appear here. Click any to review its answer.
               </p>
             )}
           </div>
         </div>
 
-        <div style={{ flex:1, overflowY:"auto", padding:"32px" }}>
-
+        <div style={rightPanelStyle}>
           {isLoading && <LoadingSpinner />}
-
           {!isLoading && activeEntry && (
             <>
-              <p style={{ margin:"0 0 16px 0", color:colors.textFaint, fontFamily:"'DM Sans',sans-serif", fontSize:12 }}>
-                <span style={{ color:colors.gold, fontWeight:600 }}>Q: </span>
+              <p style={questionPrefixStyle}>
+                <span style={{ color: colors.gold, fontWeight: 600 }}>Q: </span>
                 {activeEntry.question_text}
               </p>
-
               <AnswerCard
                 answer={activeEntry.answer}
                 citations={activeEntry.citations}
               />
-
-              <div style={{ marginTop:"1.25rem" }}>
+              <div style={{ marginTop: "1.25rem" }}>
                 <button
                   onClick={handleOpenDraft}
-                  style={{
-                    padding:"0.625rem 1.25rem",
-                    background:"rgba(168,135,46,0.12)",
-                    border:"1px solid rgba(168,135,46,0.35)",
-                    borderRadius:"6px",
-                    color:colors.gold,
-                    fontFamily:"'DM Sans',sans-serif",
-                    fontSize:"0.8rem",
-                    fontWeight:600,
-                    cursor:"pointer",
-                    letterSpacing:"0.03em",
-                    transition:"background 0.15s",
-                  }}
-                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = "rgba(168,135,46,0.22)"; }}
-                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = "rgba(168,135,46,0.12)"; }}
+                  style={draftBtnStyle}
+                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = "rgba(196,160,84,0.22)"; }}
+                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = colors.goldDim; }}
                 >
                   Draft a Response
                 </button>
               </div>
             </>
           )}
-
           {!isLoading && !activeEntry && <EmptyState />}
         </div>
       </main>

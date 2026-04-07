@@ -1,6 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 const DRAFT_TYPES = [
   {
@@ -40,6 +46,15 @@ interface Answer {
   counsel_recommended?: boolean
 }
 
+interface SignerInfo {
+  signerName: string
+  signerTitle: string
+  associationName: string
+  associationAddress: string
+  associationPhone: string
+  associationEmail: string
+}
+
 interface DraftPanelProps {
   question: string
   answer: Answer
@@ -60,6 +75,7 @@ export default function DraftPanel({
   const [groundedIn, setGroundedIn] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
+  const [signer, setSigner] = useState<SignerInfo | null>(null)
 
   const dark = {
     bg: '#0F1923',
@@ -76,6 +92,49 @@ export default function DraftPanel({
     green: '#4CAF82',
   }
 
+  useEffect(() => {
+    async function loadSigner() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const profileRes = await supabase
+        .from('profiles')
+        .select('full_name, title')
+        .eq('id', user.id)
+      const profile = profileRes.data?.[0]
+
+      const memberRes = await supabase
+        .from('association_memberships')
+        .select('association_id')
+        .eq('user_id', user.id)
+      const assocId = memberRes.data?.[0]?.association_id
+      if (!assocId) return
+
+      const assocRes = await supabase
+        .from('associations')
+        .select('legal_name, mailing_address, city, state, zip, phone, email')
+        .eq('id', assocId)
+      const assoc = assocRes.data?.[0]
+
+      const addressParts = [
+        assoc?.mailing_address,
+        assoc?.city && assoc?.state
+          ? `${assoc.city}, ${assoc.state} ${assoc.zip || ''}`.trim()
+          : null
+      ].filter(Boolean)
+
+      setSigner({
+        signerName: profile?.full_name || '',
+        signerTitle: profile?.title || '',
+        associationName: assoc?.legal_name || '',
+        associationAddress: addressParts.join('\n'),
+        associationPhone: assoc?.phone || '',
+        associationEmail: assoc?.email || ''
+      })
+    }
+    loadSigner()
+  }, [])
+
   async function handleGenerate() {
     setIsGenerating(true)
     setDraftBody('')
@@ -90,7 +149,8 @@ export default function DraftPanel({
           draft_type: selectedType,
           question,
           answer,
-          citations
+          citations,
+          signer
         })
       })
 
@@ -100,7 +160,7 @@ export default function DraftPanel({
       setDraftBody(data.body)
       setDraftSubject(data.subject)
       setGroundedIn(data.grounded_in || [])
-    } catch (err) {
+    } catch {
       setError('Something went wrong generating the draft. Please try again.')
     } finally {
       setIsGenerating(false)
@@ -129,7 +189,6 @@ export default function DraftPanel({
 
   return (
     <>
-      {/* Backdrop */}
       <div
         onClick={onClose}
         style={{
@@ -140,7 +199,6 @@ export default function DraftPanel({
         }}
       />
 
-      {/* Slide-over panel */}
       <div style={{
         position: 'fixed',
         top: 0,
@@ -156,7 +214,6 @@ export default function DraftPanel({
         overflow: 'hidden'
       }}>
 
-        {/* Header */}
         <div style={{
           padding: '1.25rem 1.5rem',
           borderBottom: `1px solid ${dark.border}`,
@@ -204,14 +261,55 @@ export default function DraftPanel({
           </button>
         </div>
 
-        {/* Scrollable body */}
         <div style={{
           flex: 1,
           overflowY: 'auto',
           padding: '1.5rem'
         }}>
 
-          {/* Draft type selector */}
+          <div style={{
+            background: dark.bg,
+            border: `1px solid ${dark.border}`,
+            borderRadius: '6px',
+            padding: '0.875rem 1rem',
+            marginBottom: '1.5rem'
+          }}>
+            <div style={{
+              fontSize: '0.65rem',
+              fontWeight: 600,
+              letterSpacing: '0.08em',
+              color: dark.textMuted,
+              textTransform: 'uppercase',
+              marginBottom: '0.5rem'
+            }}>
+              Signing As
+            </div>
+            {signer?.signerName ? (
+              <div>
+                <div style={{ fontSize: '0.85rem', color: dark.text, fontWeight: 600 }}>
+                  {signer.signerName}
+                </div>
+                {signer.signerTitle && (
+                  <div style={{ fontSize: '0.78rem', color: dark.textMuted }}>
+                    {signer.signerTitle}
+                  </div>
+                )}
+                {signer.associationName && (
+                  <div style={{ fontSize: '0.78rem', color: dark.textMuted, marginTop: '0.25rem' }}>
+                    {signer.associationName}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.78rem', color: dark.red }}>
+                No signer info found.{' '}
+                <a href="/settings" style={{ color: dark.gold, textDecoration: 'underline' }}>
+                  Add your name and title in Settings.
+                </a>
+              </div>
+            )}
+          </div>
+
           <div style={{ marginBottom: '1.5rem' }}>
             <div style={{
               fontSize: '0.7rem',
@@ -262,7 +360,6 @@ export default function DraftPanel({
             </div>
           </div>
 
-          {/* Source summary */}
           <div style={{
             background: dark.bg,
             border: `1px solid ${dark.border}`,
@@ -296,7 +393,6 @@ export default function DraftPanel({
             </div>
           </div>
 
-          {/* Generate button */}
           {!draftBody && (
             <button
               onClick={handleGenerate}
@@ -319,7 +415,6 @@ export default function DraftPanel({
             </button>
           )}
 
-          {/* Error */}
           {error && (
             <div style={{
               background: dark.redBg,
@@ -334,10 +429,8 @@ export default function DraftPanel({
             </div>
           )}
 
-          {/* Draft output */}
           {draftBody && (
             <div>
-              {/* Subject line */}
               {draftSubject && (
                 <div style={{
                   fontSize: '0.72rem',
@@ -349,7 +442,6 @@ export default function DraftPanel({
                 </div>
               )}
 
-              {/* Editable draft body */}
               <textarea
                 value={draftBody}
                 onChange={e => setDraftBody(e.target.value)}
@@ -370,7 +462,6 @@ export default function DraftPanel({
                 }}
               />
 
-              {/* Sources used */}
               {groundedIn.length > 0 && (
                 <div style={{
                   fontSize: '0.7rem',
@@ -381,7 +472,6 @@ export default function DraftPanel({
                 </div>
               )}
 
-              {/* Action buttons */}
               <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
                 <button
                   onClick={handleCopy}
@@ -401,8 +491,8 @@ export default function DraftPanel({
                   {copied ? 'Copied' : 'Copy to Clipboard'}
                 </button>
 
-                <a
-                  href={mailtoHref}
+                
+                <a  href={mailtoHref}
                   style={{
                     flex: 1,
                     padding: '0.75rem',

@@ -48,7 +48,7 @@ Write motion language that:
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { draft_type, question, answer, citations } = body
+    const { draft_type, question, answer, citations, signer } = body
 
     if (!draft_type || !question || !answer || !citations) {
       return NextResponse.json(
@@ -72,7 +72,21 @@ export async function POST(req: NextRequest) {
       )
       .join('\n\n')
 
-    const userPrompt = `ORIGINAL QUESTION:
+    const signerBlock = signer
+  ? `
+SIGNER INFORMATION (use in signature block):
+Name: ${signer.signerName || '[Name]'}
+Title: ${signer.signerTitle || '[Title]'}
+Association: ${signer.associationName || '[Association Name]'}
+${signer.associationAddress ? `Address: ${signer.associationAddress}` : ''}
+${signer.associationPhone ? `Phone: ${signer.associationPhone}` : ''}
+${signer.associationEmail ? `Email: ${signer.associationEmail}` : ''}
+`
+  : `
+SIGNER INFORMATION: Not provided. Use placeholder brackets for name, title, and association.
+`
+
+const userPrompt = `ORIGINAL QUESTION:
 ${question}
 
 GOVERNING DOCUMENT ANSWER:
@@ -87,7 +101,7 @@ ${answer.counsel_recommended ? '\nNOTE: Legal counsel review has been recommende
 
 CITED GOVERNING DOCUMENT SECTIONS:
 ${citationBlock}
-
+${signerBlock}
 Draft the appropriate document now. Do not add any preamble or explanation — output only the letter/notice/motion itself.`
 
     const completion = await openai.chat.completions.create({

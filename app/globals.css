@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../app";
 
 *, *::before, *::after {
   box-sizing: border-box;

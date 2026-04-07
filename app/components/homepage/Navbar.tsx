@@ -40,18 +40,18 @@ export default function Navbar() {
         {/* Logo */}
         <a href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline', gap: '1px' }}>
           <span style={{
-            fontFamily: 'var(--font-serif)',
-            fontSize: '22px',
+            fontFamily: 'Instrument Sans, system-ui, sans-serif',
+            fontSize: '20px',
             fontWeight: 600,
-            color: 'var(--text)',
-            letterSpacing: '0.01em',
+            color: '#1A2535',
+            letterSpacing: '-0.01em',
           }}>Board</span>
           <span style={{
-            fontFamily: 'var(--font-serif)',
-            fontSize: '22px',
+            fontFamily: 'Instrument Sans, system-ui, sans-serif',
+            fontSize: '20px',
             fontWeight: 600,
-            color: 'var(--gold-b)',
-            letterSpacing: '0.01em',
+            color: '#C4A054',
+            letterSpacing: '-0.01em',
           }}>Path</span>
         </a>
 
