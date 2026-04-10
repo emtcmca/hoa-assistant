@@ -6,13 +6,19 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../utils/supabase/client";
 import AnswerCard, { Answer, Citation } from "./components/AnswerCard";
+import type { ConfidenceScorecard } from "../utils/transparentConfidence";
 import DraftPanel from "../components/meeting/DraftPanel";
+import ShareButton from './components/ShareButton';
+import CorpusStatusBadge from './components/CorpusStatusBadge';
+import SessionSelector from './components/SessionSelector';
 
 interface SessionEntry {
   id: string;
+  answer_id: string;
   question_text: string;
   answer: Answer;
   citations: Citation[];
+  scorecard: ConfidenceScorecard | null;
   asked_at: Date;
 }
 
@@ -65,7 +71,7 @@ function LoadingSpinner() {
 
 function EmptyState() {
   const examples = [
-    "Who is responsible for maintaining the windows?",
+    "Who is responsible for maintaining the landscaping?",
     "What vote threshold is required to amend the bylaws?",
     "Can the board approve a special assessment without an owner vote?",
     "Are pets permitted, and is there a weight limit?",
@@ -239,55 +245,66 @@ export default function MeetingModePage() {
 
   const activeEntry = sessionHistory.find(e => e.id === activeEntryId) ?? null;
 
+  const [activeSession, setActiveSession] = useState<{ id: string; title: string } | null>(null);
+
+  const [userId, setUserId] = useState<string | null>(null);
+
   useEffect(() => {
-    async function init() {
-      const { data: { session } } = await supabase.auth.getSession();
+  async function init() {
+    const { data: { session } } = await supabase.auth.getSession();
 
-      if (!session) {
-        router.push("/login");
-        return;
-      }
-
-      const { data: memberships, error: membershipError } = await supabase
-        .from("association_memberships")
-        .select("association_id, associations(id, name)")
-        .eq("user_id", session.user.id)
-        .limit(1);
-
-      if (membershipError) {
-        console.error("Membership query error:", membershipError);
-        setError("No association found for your account. Contact your administrator.");
-        setAuthLoading(false);
-        return;
-      }
-
-      const membership = memberships?.[0];
-      if (!membership) {
-        setError("No association found for your account. Contact your administrator.");
-        setAuthLoading(false);
-        return;
-      }
-
-      const assocRaw = membership.associations as any;
-      const assoc = Array.isArray(assocRaw) ? assocRaw[0] : assocRaw;
-
-      if (!assoc) {
-        setError("Could not load association data. Contact your administrator.");
-        setAuthLoading(false);
-        return;
-      }
-
-      setAssociationId(assoc.id);
-      setAssociationName(assoc.name);
-      setAuthLoading(false);
-
-      setTimeout(() => inputRef.current?.focus(), 100);
+    if (!session) {
+      router.push("/login");
+      return;
     }
 
-    init();
-  }, []);
+    const { data: memberships, error: membershipError } = await supabase
+      .from("association_memberships")
+      .select("association_id")
+      .eq("user_id", session.user.id)
+      .limit(1);
+
+      setUserId(session.user.id);
+
+    if (membershipError) {
+      console.error("Membership query error:", membershipError);
+      setError("No association found for your account. Contact your administrator.");
+      setAuthLoading(false);
+      return;
+    }
+
+    const membership = memberships?.[0];
+    if (!membership) {
+      setError("No association found for your account. Contact your administrator.");
+      setAuthLoading(false);
+      return;
+    }
+
+    const { data: assocData, error: assocError } = await supabase
+      .from("associations")
+      .select("id, display_name")
+      .eq("id", membership.association_id);
+
+    if (assocError || !assocData || assocData.length === 0) {
+      setError("Could not load association data. Contact your administrator.");
+      setAuthLoading(false);
+      return;
+    }
+
+    const assoc = assocData[0];
+
+    setAssociationId(assoc.id);
+    setAssociationName(assoc.display_name);
+    setAuthLoading(false);
+
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }
+
+  init();
+}, []);
 
   async function handleAsk() {
+    console.log('handleAsk — activeSession:', activeSession);
     const trimmed = question.trim();
     if (!trimmed || !associationId || isLoading) return;
 
@@ -302,6 +319,7 @@ export default function MeetingModePage() {
         body: JSON.stringify({
           question_text: trimmed,
           association_id: associationId,
+          session_id: activeSession?.id || null,
           mode: "meeting",
         }),
       });
@@ -316,9 +334,11 @@ export default function MeetingModePage() {
 
       const entry: SessionEntry = {
         id: data.session_id,
+        answer_id: data.answer.id,
         question_text: trimmed,
         answer: data.answer,
         citations: data.citations,
+        scorecard: data.scorecard ?? null,
         asked_at: new Date(),
       };
 
@@ -565,6 +585,8 @@ export default function MeetingModePage() {
     letterSpacing: "0.03em",
     transition: "background 0.15s",
   };
+  console.log('render check — associationId:', associationId);
+  console.log('render check — activeSession:', activeSession);
 
 return (
     <div style={pageStyle}>
@@ -577,10 +599,19 @@ return (
           </div>
           <span style={dividerStyle}>|</span>
           <span style={assocNameStyle}>{associationName}</span>
+          {associationId && (
+            <CorpusStatusBadge associationId={associationId} />
+          )}
+          {associationId && (
+            <SessionSelector
+              associationId={associationId}
+              userId={userId ?? undefined}
+              onSessionChange={setActiveSession}
+            />
+          )}
         </div>
         
-        <a
-          href="/dashboard"
+         <a href="/dashboard"
           style={exitLinkStyle}
           onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.color = colors.text; }}
           onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.color = colors.textFaint; }}
@@ -649,8 +680,9 @@ return (
               <AnswerCard
                 answer={activeEntry.answer}
                 citations={activeEntry.citations}
+                scorecard={activeEntry.scorecard ?? null}
               />
-              <div style={{ marginTop: "1.25rem" }}>
+              <div style={{ marginTop: "1.25rem", display: "flex", gap: "10px", alignItems: "center" }}>
                 <button
                   onClick={handleOpenDraft}
                   style={draftBtnStyle}
@@ -659,6 +691,7 @@ return (
                 >
                   Draft a Response
                 </button>
+                <ShareButton answerId={activeEntry.answer_id} />
               </div>
             </>
           )}

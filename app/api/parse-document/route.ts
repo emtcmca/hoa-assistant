@@ -18,6 +18,46 @@ interface ParsedSection {
 
 const LLAMA_CLOUD_API_KEY = process.env.LLAMA_CLOUD_API_KEY
 const LLAMA_BASE_URL = 'https://api.cloud.llamaindex.ai/api/parsing'
+// ─── OCR quality gate ─────────────────────────────────────────────────────────
+function scoreExtractedText(text: string): { score: number; passed: boolean; reasons: string[] } {
+  const reasons: string[] = []
+  let score = 1.0
+
+  if (text.length < 500) {
+    score -= 0.5
+    reasons.push('Very short extraction — possible blank or failed OCR')
+  }
+
+  const alphaRatio = (text.match(/[a-zA-Z]/g) || []).length / Math.max(text.length, 1)
+  if (alphaRatio < 0.55) {
+    score -= 0.3
+    reasons.push(`Low alpha ratio: ${alphaRatio.toFixed(2)} — possible OCR noise`)
+  }
+
+  const legalTerms = ['shall', 'association', 'owner', 'property', 'board', 'section', 'article', 'declaration', 'covenant']
+  const textLower = text.toLowerCase()
+  const termsFound = legalTerms.filter(t => textLower.includes(t)).length
+  if (termsFound < 3) {
+    score -= 0.3
+    reasons.push(`Only ${termsFound} legal terms found — content may not be extracted`)
+  }
+
+  const refusalSignals = ["i'm sorry", "i cannot provide", "i can't assist", "i can't provide"]
+  if (refusalSignals.some(s => textLower.substring(0, 500).includes(s))) {
+    score = 0
+    reasons.push('Model refusal detected')
+  }
+
+  const words = text.split(/\s+/).slice(0, 200)
+  const uniqueWords = new Set(words).size
+  const repetitionRatio = uniqueWords / Math.max(words.length, 1)
+  if (repetitionRatio < 0.3) {
+    score -= 0.2
+    reasons.push(`High repetition ratio: ${repetitionRatio.toFixed(2)}`)
+  }
+
+  return { score: Math.max(0, score), passed: score >= 0.6, reasons }
+}
 
 // ─── Roman numeral → Arabic ───────────────────────────────────────────────────
 function romanToArabic(roman: string): number {
@@ -39,6 +79,88 @@ function normalizeArticleNum(raw: string): string {
   return t
 }
 
+// ─── Mistral OCR fallback ─────────────────────────────────────────────────────
+async function extractWithMistral(fileBuffer: ArrayBuffer): Promise<string> {
+  const base64 = Buffer.from(fileBuffer).toString('base64')
+
+  const response = await fetch('https://api.mistral.ai/v1/ocr', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'mistral-ocr-latest',
+      document: {
+        type: 'document_url',
+        document_url: `data:application/pdf;base64,${base64}`,
+      },
+    }),
+  })
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Mistral OCR failed: ${response.status} — ${err}`)
+  }
+
+  const data = await response.json()
+  const pages = data.pages || []
+  return pages.map((p: any) => p.markdown || p.text || '').join('\n\n')
+}
+
+// ─── Tiered extraction orchestrator ──────────────────────────────────────────
+async function extractTextWithFallback(
+  fileBuffer: ArrayBuffer,
+  filename: string,
+  documentId: string,
+  supabase: any
+): Promise<{ text: string; source: 'llamaparse' | 'mistral' | 'failed'; score: number }> {
+
+  // Attempt 1: LlamaParse
+  try {
+    console.log('[OCR] Attempting LlamaParse...')
+    const jobId = await uploadToLlamaParse(fileBuffer, filename)
+    await pollForCompletion(jobId)
+    const markdown = await fetchMarkdownResult(jobId)
+    const quality = scoreExtractedText(markdown)
+
+    console.log(`[OCR] LlamaParse score: ${quality.score.toFixed(2)} — ${quality.passed ? 'PASS' : 'FAIL'}`)
+    if (quality.reasons.length > 0) console.log('[OCR] LlamaParse signals:', quality.reasons)
+
+    if (quality.passed) {
+      return { text: markdown, source: 'llamaparse', score: quality.score }
+    }
+
+    await supabase
+      .from('documents')
+      .update({ ingestion_log: { llamaparse_score: quality.score, llamaparse_reasons: quality.reasons } })
+      .eq('id', documentId)
+
+  } catch (err) {
+    console.error('[OCR] LlamaParse error:', err)
+  }
+
+  // Attempt 2: Mistral OCR
+  try {
+    console.log('[OCR] LlamaParse did not pass quality gate — falling back to Mistral OCR...')
+    const mistralText = await extractWithMistral(fileBuffer)
+    const quality = scoreExtractedText(mistralText)
+
+    console.log(`[OCR] Mistral score: ${quality.score.toFixed(2)} — ${quality.passed ? 'PASS' : 'FAIL'}`)
+    if (quality.reasons.length > 0) console.log('[OCR] Mistral signals:', quality.reasons)
+
+    if (quality.passed) {
+      return { text: mistralText, source: 'mistral', score: quality.score }
+    }
+
+  } catch (err) {
+    console.error('[OCR] Mistral error:', err)
+  }
+
+  // Both failed
+  console.error('[OCR] Both LlamaParse and Mistral failed quality gate')
+  return { text: '', source: 'failed', score: 0 }
+}
 async function uploadToLlamaParse(fileBuffer: ArrayBuffer, filename: string): Promise<string> {
   const formData = new FormData()
   const blob = new Blob([fileBuffer], { type: 'application/pdf' })
@@ -370,33 +492,36 @@ export async function POST(request: NextRequest) {
     const fileBuffer = await fileData.arrayBuffer()
     const filename = document.original_filename || 'document.pdf'
 
-    console.log('[LlamaParse] Uploading document...')
-    const jobId = await uploadToLlamaParse(fileBuffer, filename)
+const extraction = await extractTextWithFallback(fileBuffer, filename, documentId, supabase)
 
-    console.log(`[LlamaParse] Job ID: ${jobId} — waiting for completion...`)
-    await pollForCompletion(jobId)
+    if (extraction.source === 'failed') {
+      await supabase
+        .from('documents')
+        .update({
+          parse_status: 'failed',
+          ingestion_log: { ocr_failed: true, attempted: ['llamaparse', 'mistral'] },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', documentId)
+      return NextResponse.json({
+        error: 'OCR extraction failed on both LlamaParse and Mistral. Document flagged for review.',
+      }, { status: 422 })
+    }
 
-    console.log('[LlamaParse] Job complete. Fetching markdown...')
-    const markdown = await fetchMarkdownResult(jobId)
+    console.log(`[OCR] Extraction complete via ${extraction.source} (score: ${extraction.score.toFixed(2)})`)
+    const markdown = extraction.text
 
-    console.log('[LlamaParse] Markdown received. Length:', markdown?.length ?? 'NULL')
-    console.log('[LlamaParse] First 200 chars:', markdown?.substring(0, 200))
+    // Store OCR output as separate artifact — never overwrite original
+    const ocrPath = `${document.association_id}/ocr_text/${documentId}.md`
+    await supabase.storage
+      .from('documents')
+      .upload(ocrPath, new Blob([markdown], { type: 'text/markdown' }), { upsert: true })
 
-    if (!markdown || markdown.trim().length < 50) {
-  await supabase.from('documents').update({ parse_status: 'failed' }).eq('id', documentId)
-  return NextResponse.json({ error: 'LlamaParse returned empty content' }, { status: 500 })
-}
-
-// Detect LlamaParse refusal — model returned apology text instead of document content
-const refusalSignals = ["i'm sorry", "i cannot provide", "i can't assist", "i can't provide"]
-const markdownLower = markdown.toLowerCase().substring(0, 500)
-if (refusalSignals.some(s => markdownLower.includes(s))) {
-  console.error('[LlamaParse] Refusal detected — model returned apology text instead of document content')
-  await supabase.from('documents').update({ parse_status: 'failed' }).eq('id', documentId)
-  return NextResponse.json({ 
-    error: 'LlamaParse refused to extract this document. This may be due to scan quality. Please try re-uploading.' 
-  }, { status: 422 })
-}
+    await supabase.from('documents').update({
+      ocr_text_key: ocrPath,
+      ocr_source: extraction.source,
+      ocr_score: extraction.score,
+    }).eq('id', documentId)
 
     const parsedSections = await parseSectionsFromMarkdown(markdown, document.title)
     const warningCount = parsedSections.filter(s => s.parser_confidence < 0.7).length
@@ -437,6 +562,67 @@ if (refusalSignals.some(s => markdownLower.includes(s))) {
         await supabase.from('documents').update({ parse_status: 'failed' }).eq('id', documentId)
         return NextResponse.json({ error: 'Section insert failed' }, { status: 500 })
       }
+      // --- AUTO-EMBEDDINGS: generate and store embeddings for all inserted sections ---
+    const { data: insertedSections, error: fetchError } = await supabase
+      .from('document_sections')
+      .select('id, body_text')
+      .eq('document_id', documentId)
+      .is('embedding', null)
+
+    if (fetchError) {
+      console.error('[parse-document] Failed to fetch sections for embedding:', fetchError)
+      // Non-fatal — sections are stored, embeddings can be backfilled later
+    } else if (insertedSections && insertedSections.length > 0) {
+      const embeddingBatchSize = 20
+      const embeddingDelay = 300
+
+      for (let i = 0; i < insertedSections.length; i += embeddingBatchSize) {
+        const batch = insertedSections.slice(i, i + embeddingBatchSize)
+
+        const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: batch.map(s => s.body_text ?? ''),
+          }),
+        })
+
+        if (!embeddingResponse.ok) {
+          console.error('[parse-document] OpenAI embedding API error:', await embeddingResponse.text())
+          // Non-fatal — continue, backfill route handles any misses
+          continue
+        }
+
+        const embeddingData = await embeddingResponse.json()
+
+        for (let j = 0; j < batch.length; j++) {
+          const section = batch[j]
+          const vector = embeddingData.data[j]?.embedding
+
+          if (!vector) continue
+
+          const { error: updateError } = await supabase
+            .from('document_sections')
+            .update({ embedding: vector })
+            .eq('id', section.id)
+
+          if (updateError) {
+            console.error('[parse-document] Embedding update failed for section:', section.id, updateError)
+          }
+        }
+
+        if (i + embeddingBatchSize < insertedSections.length) {
+          await new Promise(resolve => setTimeout(resolve, embeddingDelay))
+        }
+      }
+
+      console.log(`[parse-document] Embeddings generated: ${insertedSections.length} sections`)
+    }
+    // --- END AUTO-EMBEDDINGS ---
     }
 
     const finalStatus = warningCount > 0 ? 'warning' : 'indexed'

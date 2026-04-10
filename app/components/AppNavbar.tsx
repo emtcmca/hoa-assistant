@@ -77,7 +77,14 @@ export default function AppNavbar() {
     border: 'none',
     cursor: 'pointer',
   };
-
+  const tourLinkStyle: React.CSSProperties = {
+    fontFamily: 'Instrument Sans, system-ui, sans-serif',
+    fontSize: '13px',
+    color: 'rgba(26,37,53,0.45)',
+    textDecoration: 'none',
+    fontWeight: '400',
+  }
+  
   return (
     <nav style={navbarStyle}>
       <div style={innerStyle}>
@@ -96,14 +103,19 @@ export default function AppNavbar() {
             <Link href="/meeting-mode" style={navLinkStyle}>Meeting Mode</Link>
             <Link href="/history" style={navLinkStyle}>History</Link>
             <div style={separatorStyle} />
-            {isSignedIn ? (
-              <button onClick={handleSignOut} style={signOutStyle}>
-                Sign out
-              </button>
-            ) : (
-              <Link href="/login" style={signOutStyle}>Sign in</Link>
-            )}
-          </div>
+              {isSignedIn ? (
+                <>
+                  <a href="/onboarding?mode=tour" style={tourLinkStyle}>
+                    Take the tour
+                  </a>
+                  <button onClick={handleSignOut} style={signOutStyle}>
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <Link href="/login" style={signOutStyle}>Sign in</Link>
+              )}
+            </div>
         )}
 
       </div>

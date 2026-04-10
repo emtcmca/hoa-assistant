@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "../../../utils/supabase/server";
 import OpenAI from "openai";
+import { computeTransparentConfidence } from '../../utils/transparentConfidence';
  
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
  
@@ -160,6 +161,7 @@ export async function POST(req: NextRequest) {
     const association_id  = body.association_id  ?? body.associationId ?? null;
     const mode            = body.mode            ?? "meeting";
     const meeting_id      = body.meeting_id      ?? body.meetingId    ?? null;
+    const session_id      = body.session_id      ?? null;
  
     if (!question_text || !association_id) {
       return NextResponse.json(
@@ -310,14 +312,50 @@ export async function POST(req: NextRequest) {
  
     candidates.sort((a, b) => b.combined_score - a.combined_score);
     const topCandidates = candidates.slice(0, 6);
- 
+
     if (topCandidates.length === 0) {
       return NextResponse.json(
         { error: "no_results", message: "No relevant sections found for this question." },
         { status: 200 }
       );
     }
- 
+
+    const meaningfulCandidates = topCandidates.filter(
+      c => c.combined_score > 0.05
+    );
+
+    if (meaningfulCandidates.length === 0) {
+      return NextResponse.json(
+        { error: "no_results", message: "No relevant sections found for this question." },
+        { status: 200 }
+      );
+    }
+    // Corpus coverage inputs for Transparent Confidence scoring
+const activeDocTypes = new Set(
+  topCandidates.map(c => c.document_type).filter(Boolean)
+);
+
+// Count distinct expected document types present across ALL active documents
+// We use topCandidates as a proxy — not perfect but avoids an extra DB query
+const expectedTypes = ['declaration', 'bylaws', 'rules', 'amendments', 'other'];
+const presentExpectedCount = expectedTypes.filter(t =>
+  Array.from(activeDocTypes).some(active =>
+    active?.toLowerCase().includes(t)
+  )
+).length;
+
+// missing_relevant_type = true only when:
+// the question clearly needs a doc type AND that type is completely absent
+// We approximate: if all top candidates are from one doc type AND
+// the question would benefit from a higher-authority doc that isn't present
+// For now: only flag if NO declaration or bylaws present at all
+const hasHighAuthority = Array.from(activeDocTypes).some(dt =>
+  dt?.toLowerCase().includes('declaration') ||
+  dt?.toLowerCase().includes('bylaw') ||
+  dt?.toLowerCase().includes('ccr')
+);
+const missingRelevantType = !hasHighAuthority && presentExpectedCount < 3;
+
     // ── 7. Build evidence block for the prompt ───────────────
     const evidenceBlock = topCandidates
       .map((c, i) => {
@@ -361,7 +399,25 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
- 
+    
+ // Compute Transparent Confidence scorecard
+    const scorecard = computeTransparentConfidence({
+      confidence_level: answer.confidence_level,
+      ambiguity_notes: answer.ambiguity_notes ?? null,
+      counsel_review_recommended: answer.counsel_review_recommended,
+      statute_note: answer.statute_note ?? null,
+      has_hierarchy_conflict: answer.has_hierarchy_conflict ?? false,
+      candidates: topCandidates.map(c => ({
+        authority_rank: c.authority_rank,
+        semantic_score: c.semantic_score,
+        keyword_score: c.keyword_score,
+        amends_document_id: c.amends_document_id,
+        document_type: c.document_type,
+        combined_score: c.combined_score,
+      })),
+      corpus_doc_count: presentExpectedCount,
+      missing_relevant_type: missingRelevantType,
+    });
     // ── 10. Persist to Supabase ──────────────────────────────
  
     // 10a. Question session
@@ -390,6 +446,8 @@ export async function POST(req: NextRequest) {
         counsel_review_recommended: answer.counsel_review_recommended,
         has_hierarchy_conflict: answer.has_hierarchy_conflict ?? false,
         hierarchy_conflict_note: answer.hierarchy_conflict_note ?? null,
+        session_id: session_id,
+        confidence_scorecard: scorecard,
       })
       .select()
       .single();
@@ -440,6 +498,7 @@ export async function POST(req: NextRequest) {
       citations,
       session_id: session.id,
       question_text,
+      scorecard,
     });
  
   } catch (err) {

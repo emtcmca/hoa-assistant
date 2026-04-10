@@ -1,6 +1,8 @@
-"use client";
+﻿"use client";
 
 // app/meeting-mode/components/AnswerCard.tsx
+
+import { useState } from "react";
 
 export interface Citation {
   citation_label: string;
@@ -29,9 +31,28 @@ export interface Answer {
   statute_note: string | null;
 }
 
+interface DimensionScore {
+  score: number;
+  max: number;
+  explanation: string;
+}
+
+interface ConfidenceScorecard {
+  total: number;
+  label: "Strong" | "Moderate" | "Limited" | "Insufficient";
+  labelColor: "green" | "amber" | "orange" | "red";
+  dimensions: {
+    authority: DimensionScore;
+    agreement: DimensionScore;
+    coverage: DimensionScore;
+    clarity: DimensionScore;
+  };
+}
+
 interface AnswerCardProps {
   answer: Answer;
   citations: Citation[];
+  scorecard?: ConfidenceScorecard | null;
 }
 
 const colors = {
@@ -60,6 +81,227 @@ const colors = {
   orangeBorder: "rgba(234,88,12,0.22)",
   orangeText:   "#EA580C",
 };
+
+const scorecardLabelConfig = {
+  Strong:       { bg: "rgba(64,145,108,0.08)",  border: "rgba(64,145,108,0.25)",  color: "#2D6A4F", dot: "#40916C" },
+  Moderate:     { bg: "rgba(217,119,6,0.08)",   border: "rgba(217,119,6,0.25)",   color: "#92400E", dot: "#D97706" },
+  Limited:      { bg: "rgba(234,88,12,0.07)",   border: "rgba(234,88,12,0.22)",   color: "#9A3412", dot: "#EA580C" },
+  Insufficient: { bg: "rgba(220,38,38,0.06)",   border: "rgba(220,38,38,0.20)",   color: "#7F1D1D", dot: "#DC2626" },
+};
+
+function getBarColor(labelColor: string): string {
+  if (labelColor === "green")  return "#40916C";
+  if (labelColor === "amber")  return "#D97706";
+  if (labelColor === "orange") return "#EA580C";
+  return "#DC2626";
+}
+
+function ScoreBar({ score, max, color }: { score: number; max: number; color: string }) {
+  const pct = Math.round((score / max) * 100);
+  const trackStyle: React.CSSProperties = {
+    width: "100%",
+    height: 4,
+    borderRadius: 2,
+    background: "rgba(26,37,53,0.08)",
+    overflow: "hidden",
+  };
+  const fillStyle: React.CSSProperties = {
+    width: `${pct}%`,
+    height: "100%",
+    borderRadius: 2,
+    background: color,
+    transition: "width 0.4s ease",
+  };
+  return (
+    <div style={trackStyle}>
+      <div style={fillStyle} />
+    </div>
+  );
+}
+
+function DimensionRow({
+  label,
+  dimension,
+  color,
+}: {
+  label: string;
+  dimension: DimensionScore;
+  color: string;
+}) {
+  const rowStyle: React.CSSProperties = {
+    padding: "10px 0",
+    borderBottom: "1px solid rgba(26,37,53,0.06)",
+  };
+  const headerStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  };
+  const labelStyle: React.CSSProperties = {
+    color: colors.text,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 12,
+    fontWeight: 600,
+  };
+  const scoreStyle: React.CSSProperties = {
+    color: color,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.02em",
+  };
+  const explanationStyle: React.CSSProperties = {
+    marginTop: 6,
+    color: colors.textMuted,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 11,
+    lineHeight: 1.6,
+  };
+  return (
+    <div style={rowStyle}>
+      <div style={headerStyle}>
+        <span style={labelStyle}>{label}</span>
+        <span style={scoreStyle}>{dimension.score} / {dimension.max}</span>
+      </div>
+      <ScoreBar score={dimension.score} max={dimension.max} color={color} />
+      <p style={explanationStyle}>{dimension.explanation}</p>
+    </div>
+  );
+}
+
+function TransparentConfidencePanel({ scorecard }: { scorecard: ConfidenceScorecard }) {
+  const [expanded, setExpanded] = useState(
+  scorecard.label === 'Insufficient' || scorecard.label === 'Limited'
+);
+  const cfg = scorecardLabelConfig[scorecard.label];
+  const barColor = getBarColor(scorecard.labelColor);
+
+  const panelStyle: React.CSSProperties = {
+    marginBottom: 20,
+    borderRadius: 8,
+    border: `1px solid ${cfg.border}`,
+    background: cfg.bg,
+    overflow: "hidden",
+  };
+  const headerStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "12px 16px",
+    cursor: "pointer",
+    userSelect: "none",
+  };
+  const leftGroupStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  };
+  const tmLabelStyle: React.CSSProperties = {
+    color: cfg.color,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+  };
+  const dotStyle: React.CSSProperties = {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: cfg.dot,
+    flexShrink: 0,
+  };
+  const scoreGroupStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  };
+  const numericStyle: React.CSSProperties = {
+    color: cfg.color,
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: 22,
+    fontWeight: 700,
+    lineHeight: 1,
+  };
+  const dividerStyle: React.CSSProperties = {
+    color: cfg.color,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 11,
+    opacity: 0.5,
+  };
+  const compositeStyle: React.CSSProperties = {
+    color: cfg.color,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 12,
+    fontWeight: 600,
+  };
+  const chevronStyle: React.CSSProperties = {
+    color: cfg.color,
+    fontSize: 11,
+    opacity: 0.7,
+    transition: "transform 0.2s",
+    transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+  };
+  const breakdownStyle: React.CSSProperties = {
+    padding: "0 16px 4px",
+    borderTop: `1px solid ${cfg.border}`,
+  };
+  const footerStyle: React.CSSProperties = {
+    padding: "8px 16px",
+    borderTop: `1px solid ${cfg.border}`,
+    color: cfg.color,
+    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontSize: 10,
+    opacity: 0.7,
+    letterSpacing: "0.03em",
+  };
+
+  return (
+    <div style={panelStyle}>
+      <div style={headerStyle} onClick={() => setExpanded(e => !e)}>
+        <div style={leftGroupStyle}>
+          <span style={dotStyle} />
+          <span style={tmLabelStyle}>Transparent Confidence™</span>
+        </div>
+        <div style={scoreGroupStyle}>
+          <span style={numericStyle}>{scorecard.total}</span>
+          <span style={dividerStyle}>/100</span>
+          <span style={compositeStyle}>{scorecard.label}</span>
+          <span style={chevronStyle}>▾</span>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={breakdownStyle}>
+          <DimensionRow
+            label="Document Authority"
+            dimension={scorecard.dimensions.authority}
+            color={barColor}
+          />
+          <DimensionRow
+            label="Source Agreement"
+            dimension={scorecard.dimensions.agreement}
+            color={barColor}
+          />
+          <DimensionRow
+            label="Corpus Coverage"
+            dimension={scorecard.dimensions.coverage}
+            color={barColor}
+          />
+          <DimensionRow
+            label="Answer Clarity"
+            dimension={scorecard.dimensions.clarity}
+            color={barColor}
+          />
+          <div style={footerStyle}>
+            Each dimension scored 0–25. Total reflects composite answer trustworthiness.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function getAuthorityStyle(rank: number) {
   if (rank <= 1)  return { bg: "rgba(99,102,241,0.08)",  border: "rgba(99,102,241,0.25)",  color: "#4338CA", dot: "#6366F1" };
@@ -306,7 +548,7 @@ function CitationItem({ citation, index }: { citation: Citation; index: number }
   );
 }
 
-export default function AnswerCard({ answer, citations }: AnswerCardProps) {
+export default function AnswerCard({ answer, citations, scorecard }: AnswerCardProps) {
   const sortedCitations = [...citations].sort((a, b) => {
     if (a.authority_rank !== b.authority_rank) return a.authority_rank - b.authority_rank;
     return b.relevance_score - a.relevance_score;
@@ -425,6 +667,10 @@ export default function AnswerCard({ answer, citations }: AnswerCardProps) {
 
   return (
     <div style={cardStyle}>
+
+      {scorecard && (
+        <TransparentConfidencePanel scorecard={scorecard} />
+      )}
 
       <div style={{ marginBottom: 20 }}>
         <ConfidenceBadge level={answer.confidence_level} />

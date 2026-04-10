@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
@@ -9,26 +9,10 @@ const supabase = createClient(
 )
 
 const DRAFT_TYPES = [
-  {
-    id: 'owner_response',
-    label: 'Owner Response',
-    description: 'A formal reply to an owner inquiry'
-  },
-  {
-    id: 'violation_notice',
-    label: 'Violation Notice',
-    description: 'A notice of rule violation requiring corrective action'
-  },
-  {
-    id: 'board_notice',
-    label: 'Board Notice',
-    description: 'A general notice from the board to all residents'
-  },
-  {
-    id: 'motion_language',
-    label: 'Motion Language',
-    description: 'Formal motion wording for board meeting minutes'
-  }
+  { id: 'owner_response',   label: 'Owner Response',   description: 'A formal reply to an owner inquiry' },
+  { id: 'violation_notice', label: 'Violation Notice',  description: 'A notice of rule violation requiring corrective action' },
+  { id: 'board_notice',     label: 'Board Notice',      description: 'A general notice from the board to all residents' },
+  { id: 'motion_language',  label: 'Motion Language',   description: 'Formal motion wording for board meeting minutes' },
 ]
 
 interface Citation {
@@ -55,6 +39,17 @@ interface SignerInfo {
   associationEmail: string
 }
 
+interface Homeowner {
+  id: string
+  full_name: string
+  unit: string | null
+  mailing_address: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
+  email: string | null
+}
+
 interface DraftPanelProps {
   question: string
   answer: Answer
@@ -62,38 +57,39 @@ interface DraftPanelProps {
   onClose: () => void
 }
 
-export default function DraftPanel({
-  question,
-  answer,
-  citations,
-  onClose
-}: DraftPanelProps) {
-  const [selectedType, setSelectedType] = useState('owner_response')
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [draftBody, setDraftBody] = useState('')
-  const [draftSubject, setDraftSubject] = useState('')
-  const [groundedIn, setGroundedIn] = useState<string[]>([])
-  const [copied, setCopied] = useState(false)
-  const [error, setError] = useState('')
-  const [signer, setSigner] = useState<SignerInfo | null>(null)
+export default function DraftPanel({ question, answer, citations, onClose }: DraftPanelProps) {
+  const [selectedType, setSelectedType]       = useState('owner_response')
+  const [isGenerating, setIsGenerating]       = useState(false)
+  const [draftBody, setDraftBody]             = useState('')
+  const [draftSubject, setDraftSubject]       = useState('')
+  const [groundedIn, setGroundedIn]           = useState<string[]>([])
+  const [copied, setCopied]                   = useState(false)
+  const [error, setError]                     = useState('')
+  const [signer, setSigner]                   = useState<SignerInfo | null>(null)
+  const [associationId, setAssociationId]     = useState<string | null>(null)
+  const [homeowners, setHomeowners]           = useState<Homeowner[]>([])
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string>('')
+  const [isDownloading, setIsDownloading]     = useState(false)
 
   const dark = {
-    bg: '#0F1923',
-    bg2: '#1A2535',
-    bg3: '#21304A',
-    border: 'rgba(255,255,255,0.08)',
+    bg:         '#0F1923',
+    bg2:        '#1A2535',
+    bg3:        '#21304A',
+    border:     'rgba(255,255,255,0.08)',
     borderGold: 'rgba(168,135,46,0.40)',
-    text: '#E8E4DC',
-    textMuted: '#8A95A3',
-    gold: '#C4A054',
-    goldBg: 'rgba(168,135,46,0.10)',
-    red: '#E05252',
-    redBg: 'rgba(224,82,82,0.10)',
-    green: '#4CAF82',
+    text:       '#E8E4DC',
+    textMuted:  '#8A95A3',
+    gold:       '#C4A054',
+    goldBg:     'rgba(168,135,46,0.10)',
+    red:        '#E05252',
+    redBg:      'rgba(224,82,82,0.10)',
+    green:      '#4CAF82',
   }
 
+  const selectedOwner = homeowners.find(h => h.id === selectedOwnerId) ?? null
+
   useEffect(() => {
-    async function loadSigner() {
+    async function loadData() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
@@ -109,6 +105,7 @@ export default function DraftPanel({
         .eq('user_id', user.id)
       const assocId = memberRes.data?.[0]?.association_id
       if (!assocId) return
+      setAssociationId(assocId)
 
       const assocRes = await supabase
         .from('associations')
@@ -120,19 +117,26 @@ export default function DraftPanel({
         assoc?.mailing_address,
         assoc?.city && assoc?.state
           ? `${assoc.city}, ${assoc.state} ${assoc.zip || ''}`.trim()
-          : null
+          : null,
       ].filter(Boolean)
 
       setSigner({
-        signerName: profile?.full_name || '',
-        signerTitle: profile?.title || '',
-        associationName: assoc?.legal_name || '',
+        signerName:         profile?.full_name || '',
+        signerTitle:        profile?.title || '',
+        associationName:    assoc?.legal_name || '',
         associationAddress: addressParts.join('\n'),
-        associationPhone: assoc?.phone || '',
-        associationEmail: assoc?.email || ''
+        associationPhone:   assoc?.phone || '',
+        associationEmail:   assoc?.email || '',
       })
+
+      const homeownersRes = await supabase
+        .from('homeowners')
+        .select('id, full_name, unit, mailing_address, city, state, zip, email')
+        .eq('association_id', assocId)
+        .order('full_name', { ascending: true })
+      setHomeowners(homeownersRes.data ?? [])
     }
-    loadSigner()
+    loadData()
   }, [])
 
   async function handleGenerate() {
@@ -140,7 +144,6 @@ export default function DraftPanel({
     setDraftBody('')
     setDraftSubject('')
     setError('')
-
     try {
       const res = await fetch('/api/draft', {
         method: 'POST',
@@ -150,12 +153,11 @@ export default function DraftPanel({
           question,
           answer,
           citations,
-          signer
-        })
+          signer,
+          owner: selectedOwner,
+        }),
       })
-
       if (!res.ok) throw new Error('Draft generation failed')
-
       const data = await res.json()
       setDraftBody(data.body)
       setDraftSubject(data.subject)
@@ -168,12 +170,41 @@ export default function DraftPanel({
   }
 
   async function handleCopy() {
-    const fullText = draftSubject
-      ? `Subject: ${draftSubject}\n\n${draftBody}`
-      : draftBody
+    const fullText = draftSubject ? `Subject: ${draftSubject}\n\n${draftBody}` : draftBody
     await navigator.clipboard.writeText(fullText)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function handleDownloadDocx() {
+    if (!associationId || !draftBody) return
+    setIsDownloading(true)
+    try {
+      const res = await fetch('/api/generate-docx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          association_id: associationId,
+          draft_type:     selectedType,
+          subject:        draftSubject,
+          body:           draftBody,
+          signer,
+          owner:          selectedOwner,
+        }),
+      })
+      if (!res.ok) throw new Error('DOCX generation failed')
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ?? 'letter.docx'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError('Failed to generate Word document. Please try again.')
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   function handleReset() {
@@ -187,150 +218,223 @@ export default function DraftPanel({
     ? `mailto:?subject=${encodeURIComponent(draftSubject)}&body=${encodeURIComponent(draftBody)}`
     : 'mailto:'
 
+  // ── Styles ────────────────────────────────────────────────────────────────
+
+  const overlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.5)',
+    zIndex: 40,
+  }
+
+  const panelStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    maxWidth: '560px',
+    background: dark.bg2,
+    borderLeft: `1px solid ${dark.border}`,
+    zIndex: 50,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  }
+
+  const panelHeaderStyle: React.CSSProperties = {
+    padding: '1.25rem 1.5rem',
+    borderBottom: `1px solid ${dark.border}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexShrink: 0,
+  }
+
+  const panelScrollStyle: React.CSSProperties = {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '1.5rem',
+  }
+
+  const infoBoxStyle: React.CSSProperties = {
+    background: dark.bg,
+    border: `1px solid ${dark.border}`,
+    borderRadius: '6px',
+    padding: '0.875rem 1rem',
+    marginBottom: '1.5rem',
+  }
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: '0.65rem',
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    color: dark.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: '0.5rem',
+  }
+
+  const ownerSelectStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.5rem 0.75rem',
+    background: dark.bg,
+    border: `1px solid ${dark.border}`,
+    borderRadius: '6px',
+    color: dark.text,
+    fontFamily: 'inherit',
+    fontSize: '0.82rem',
+  }
+
+  const generateBtnStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.875rem',
+    background: isGenerating ? dark.bg3 : dark.gold,
+    color: isGenerating ? dark.textMuted : '#0F1923',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    cursor: isGenerating ? 'not-allowed' : 'pointer',
+    marginBottom: '1rem',
+  }
+
+  const copyBtnStyle: React.CSSProperties = {
+    flex: 1,
+    padding: '0.75rem',
+    background: copied ? dark.green : dark.gold,
+    color: '#0F1923',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '0.82rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+  }
+
+  const docxBtnStyle: React.CSSProperties = {
+    flex: 1,
+    padding: '0.75rem',
+    background: dark.bg3,
+    border: `1px solid ${dark.borderGold}`,
+    borderRadius: '6px',
+    color: dark.gold,
+    fontSize: '0.82rem',
+    fontWeight: 600,
+    cursor: isDownloading ? 'not-allowed' : 'pointer',
+  }
+
+  const mailtoStyle: React.CSSProperties = {
+    display: 'block',
+    width: '100%',
+    padding: '0.75rem',
+    background: dark.bg3,
+    border: `1px solid ${dark.border}`,
+    borderRadius: '6px',
+    color: dark.text,
+    fontSize: '0.82rem',
+    fontWeight: 600,
+    textDecoration: 'none',
+    textAlign: 'center',
+    boxSizing: 'border-box',
+    marginBottom: '0.75rem',
+  }
+
+  const resetBtnStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.625rem 1rem',
+    background: 'none',
+    border: `1px solid ${dark.border}`,
+    borderRadius: '6px',
+    color: dark.textMuted,
+    fontSize: '0.82rem',
+    cursor: 'pointer',
+  }
+
+  const textareaStyle: React.CSSProperties = {
+    width: '100%',
+    minHeight: '320px',
+    background: dark.bg,
+    border: `1px solid ${dark.border}`,
+    borderRadius: '6px',
+    padding: '1rem',
+    color: dark.text,
+    fontSize: '0.82rem',
+    lineHeight: 1.7,
+    resize: 'vertical',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
+    marginBottom: '0.75rem',
+  }
+
   return (
     <>
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.5)',
-          zIndex: 40
-        }}
-      />
+      <div onClick={onClose} style={overlayStyle} />
 
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        right: 0,
-        bottom: 0,
-        width: '100%',
-        maxWidth: '560px',
-        background: dark.bg2,
-        borderLeft: `1px solid ${dark.border}`,
-        zIndex: 50,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden'
-      }}>
+      <div style={panelStyle}>
 
-        <div style={{
-          padding: '1.25rem 1.5rem',
-          borderBottom: `1px solid ${dark.border}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexShrink: 0
-        }}>
+        <div style={panelHeaderStyle}>
           <div>
-            <div style={{
-              fontSize: '0.65rem',
-              fontWeight: 600,
-              letterSpacing: '0.1em',
-              color: dark.gold,
-              textTransform: 'uppercase',
-              marginBottom: '0.25rem'
-            }}>
+            <div style={{ fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.1em', color: dark.gold, textTransform: 'uppercase', marginBottom: '0.25rem' }}>
               Draft Generator
             </div>
-            <div style={{
-              fontSize: '0.85rem',
-              color: dark.textMuted,
-              fontStyle: 'italic',
-              maxWidth: '380px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>
-              &ldquo;{question}&rdquo;
+            <div style={{ fontSize: '0.85rem', color: dark.textMuted, fontStyle: 'italic', maxWidth: '380px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              "{question}"
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: dark.textMuted,
-              cursor: 'pointer',
-              fontSize: '1.25rem',
-              lineHeight: 1,
-              padding: '0.25rem'
-            }}
-          >
-            &times;
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: dark.textMuted, cursor: 'pointer', fontSize: '1.25rem', lineHeight: 1, padding: '0.25rem' }}>
+            x
           </button>
         </div>
 
-        <div style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '1.5rem'
-        }}>
+        <div style={panelScrollStyle}>
 
-          <div style={{
-            background: dark.bg,
-            border: `1px solid ${dark.border}`,
-            borderRadius: '6px',
-            padding: '0.875rem 1rem',
-            marginBottom: '1.5rem'
-          }}>
-            <div style={{
-              fontSize: '0.65rem',
-              fontWeight: 600,
-              letterSpacing: '0.08em',
-              color: dark.textMuted,
-              textTransform: 'uppercase',
-              marginBottom: '0.5rem'
-            }}>
-              Signing As
-            </div>
+          <div style={infoBoxStyle}>
+            <div style={labelStyle}>Signing As</div>
             {signer?.signerName ? (
               <div>
-                <div style={{ fontSize: '0.85rem', color: dark.text, fontWeight: 600 }}>
-                  {signer.signerName}
-                </div>
-                {signer.signerTitle && (
-                  <div style={{ fontSize: '0.78rem', color: dark.textMuted }}>
-                    {signer.signerTitle}
-                  </div>
-                )}
-                {signer.associationName && (
-                  <div style={{ fontSize: '0.78rem', color: dark.textMuted, marginTop: '0.25rem' }}>
-                    {signer.associationName}
-                  </div>
-                )}
+                <div style={{ fontSize: '0.85rem', color: dark.text, fontWeight: 600 }}>{signer.signerName}</div>
+                {signer.signerTitle     && <div style={{ fontSize: '0.78rem', color: dark.textMuted }}>{signer.signerTitle}</div>}
+                {signer.associationName && <div style={{ fontSize: '0.78rem', color: dark.textMuted, marginTop: '0.25rem' }}>{signer.associationName}</div>}
               </div>
             ) : (
               <div style={{ fontSize: '0.78rem', color: dark.red }}>
                 No signer info found.{' '}
-                <a href="/settings" style={{ color: dark.gold, textDecoration: 'underline' }}>
-                  Add your name and title in Settings.
-                </a>
+                <a href="/settings" style={{ color: dark.gold, textDecoration: 'underline' }}>Add your name and title in Settings.</a>
               </div>
             )}
           </div>
 
           <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{
-              fontSize: '0.7rem',
-              fontWeight: 600,
-              letterSpacing: '0.08em',
-              color: dark.textMuted,
-              textTransform: 'uppercase',
-              marginBottom: '0.75rem'
-            }}>
-              Document Type
+            <div style={labelStyle}>
+              Addressed To{' '}
+              {homeowners.length === 0 && (
+                <span style={{ color: dark.red, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+                  -- no homeowners on roster
+                </span>
+              )}
             </div>
+            {homeowners.length > 0 ? (
+              <select value={selectedOwnerId} onChange={e => setSelectedOwnerId(e.target.value)} style={ownerSelectStyle}>
+                <option value="">-- General / no specific owner --</option>
+                {homeowners.map(h => (
+                  <option key={h.id} value={h.id}>
+                    {h.full_name}{h.unit ? ` (Unit ${h.unit})` : ''}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p style={{ fontSize: '0.78rem', color: dark.textMuted, margin: 0 }}>
+                <a href="/homeowners" style={{ color: dark.gold, textDecoration: 'underline' }}>Upload your homeowner roster</a> to auto-fill recipient details.
+              </p>
+            )}
+          </div>
+
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ ...labelStyle, marginBottom: '0.75rem' }}>Document Type</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {DRAFT_TYPES.map(type => (
                 <button
                   key={type.id}
-                  onClick={() => {
-                    setSelectedType(type.id)
-                    setDraftBody('')
-                    setDraftSubject('')
-                    setError('')
-                  }}
+                  onClick={() => { setSelectedType(type.id); setDraftBody(''); setDraftSubject(''); setError('') }}
                   style={{
                     background: selectedType === type.id ? dark.goldBg : dark.bg3,
                     border: `1px solid ${selectedType === type.id ? dark.borderGold : dark.border}`,
@@ -338,55 +442,22 @@ export default function DraftPanel({
                     padding: '0.75rem 1rem',
                     textAlign: 'left',
                     cursor: 'pointer',
-                    transition: 'all 0.15s'
                   }}
                 >
-                  <div style={{
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
-                    color: selectedType === type.id ? dark.gold : dark.text,
-                    marginBottom: '0.2rem'
-                  }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: selectedType === type.id ? dark.gold : dark.text, marginBottom: '0.2rem' }}>
                     {type.label}
                   </div>
-                  <div style={{
-                    fontSize: '0.75rem',
-                    color: dark.textMuted
-                  }}>
-                    {type.description}
-                  </div>
+                  <div style={{ fontSize: '0.75rem', color: dark.textMuted }}>{type.description}</div>
                 </button>
               ))}
             </div>
           </div>
 
-          <div style={{
-            background: dark.bg,
-            border: `1px solid ${dark.border}`,
-            borderRadius: '6px',
-            padding: '0.875rem 1rem',
-            marginBottom: '1.5rem'
-          }}>
-            <div style={{
-              fontSize: '0.65rem',
-              fontWeight: 600,
-              letterSpacing: '0.08em',
-              color: dark.textMuted,
-              textTransform: 'uppercase',
-              marginBottom: '0.5rem'
-            }}>
-              Grounded In
-            </div>
+          <div style={infoBoxStyle}>
+            <div style={labelStyle}>Grounded In</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
               {citations.map((c, i) => (
-                <span key={i} style={{
-                  fontSize: '0.72rem',
-                  background: dark.bg3,
-                  border: `1px solid ${dark.border}`,
-                  borderRadius: '4px',
-                  padding: '0.2rem 0.5rem',
-                  color: dark.textMuted
-                }}>
+                <span key={i} style={{ fontSize: '0.72rem', background: dark.bg3, border: `1px solid ${dark.border}`, borderRadius: '4px', padding: '0.2rem 0.5rem', color: dark.textMuted }}>
                   {c.citation_label}
                 </span>
               ))}
@@ -394,37 +465,13 @@ export default function DraftPanel({
           </div>
 
           {!draftBody && (
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              style={{
-                width: '100%',
-                padding: '0.875rem',
-                background: isGenerating ? dark.bg3 : dark.gold,
-                color: isGenerating ? dark.textMuted : '#0F1923',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                cursor: isGenerating ? 'not-allowed' : 'pointer',
-                transition: 'all 0.15s',
-                marginBottom: '1rem'
-              }}
-            >
+            <button onClick={handleGenerate} disabled={isGenerating} style={generateBtnStyle}>
               {isGenerating ? 'Generating draft...' : 'Generate Draft'}
             </button>
           )}
 
           {error && (
-            <div style={{
-              background: dark.redBg,
-              border: `1px solid ${dark.red}`,
-              borderRadius: '6px',
-              padding: '0.75rem 1rem',
-              fontSize: '0.8rem',
-              color: dark.red,
-              marginBottom: '1rem'
-            }}>
+            <div style={{ background: dark.redBg, border: `1px solid ${dark.red}`, borderRadius: '6px', padding: '0.75rem 1rem', fontSize: '0.8rem', color: dark.red, marginBottom: '1rem' }}>
               {error}
             </div>
           )}
@@ -432,104 +479,38 @@ export default function DraftPanel({
           {draftBody && (
             <div>
               {draftSubject && (
-                <div style={{
-                  fontSize: '0.72rem',
-                  color: dark.textMuted,
-                  marginBottom: '0.5rem'
-                }}>
-                  <span style={{ fontWeight: 600, color: dark.text }}>Subject: </span>
-                  {draftSubject}
+                <div style={{ fontSize: '0.72rem', color: dark.textMuted, marginBottom: '0.5rem' }}>
+                  <span style={{ fontWeight: 600, color: dark.text }}>Subject: </span>{draftSubject}
                 </div>
               )}
 
-              <textarea
-                value={draftBody}
-                onChange={e => setDraftBody(e.target.value)}
-                style={{
-                  width: '100%',
-                  minHeight: '320px',
-                  background: dark.bg,
-                  border: `1px solid ${dark.border}`,
-                  borderRadius: '6px',
-                  padding: '1rem',
-                  color: dark.text,
-                  fontSize: '0.82rem',
-                  lineHeight: 1.7,
-                  resize: 'vertical',
-                  fontFamily: 'inherit',
-                  boxSizing: 'border-box',
-                  marginBottom: '0.75rem'
-                }}
-              />
+              <textarea value={draftBody} onChange={e => setDraftBody(e.target.value)} style={textareaStyle} />
 
               {groundedIn.length > 0 && (
-                <div style={{
-                  fontSize: '0.7rem',
-                  color: dark.textMuted,
-                  marginBottom: '1rem'
-                }}>
+                <div style={{ fontSize: '0.7rem', color: dark.textMuted, marginBottom: '1rem' }}>
                   Sources used: {groundedIn.join(', ')}
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <button
-                  onClick={handleCopy}
-                  style={{
-                    flex: 1,
-                    padding: '0.75rem',
-                    background: copied ? dark.green : dark.gold,
-                    color: '#0F1923',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '0.82rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s'
-                  }}
-                >
+                <button onClick={handleCopy} style={copyBtnStyle}>
                   {copied ? 'Copied' : 'Copy to Clipboard'}
                 </button>
-
-                
-                <a  href={mailtoHref}
-                  style={{
-                    flex: 1,
-                    padding: '0.75rem',
-                    background: dark.bg3,
-                    border: `1px solid ${dark.border}`,
-                    borderRadius: '6px',
-                    color: dark.text,
-                    fontSize: '0.82rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    textDecoration: 'none',
-                    textAlign: 'center' as const,
-                    display: 'block',
-                    boxSizing: 'border-box' as const
-                  }}
-                >
-                  Open in Email Client
-                </a>
+                <button onClick={handleDownloadDocx} disabled={isDownloading} style={docxBtnStyle}>
+                  {isDownloading ? 'Generating...' : 'Download DOCX'}
+                </button>
               </div>
 
-              <button
-                onClick={handleReset}
-                style={{
-                  width: '100%',
-                  padding: '0.625rem 1rem',
-                  background: 'none',
-                  border: `1px solid ${dark.border}`,
-                  borderRadius: '6px',
-                  color: dark.textMuted,
-                  fontSize: '0.82rem',
-                  cursor: 'pointer'
-                }}
-              >
+              <a href={mailtoHref} style={mailtoStyle}>
+                Open in Email Client
+              </a>
+
+              <button onClick={handleReset} style={resetBtnStyle}>
                 Regenerate
               </button>
             </div>
           )}
+
         </div>
       </div>
     </>

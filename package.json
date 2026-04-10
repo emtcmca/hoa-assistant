@@ -11,6 +11,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
+    "docx": "^9.6.1",
     "next": "16.2.2",
     "openai": "^6.33.0",
     "pdf2json": "^4.0.2",

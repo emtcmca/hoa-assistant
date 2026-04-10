@@ -32,7 +32,15 @@ interface HistoryEntry {
   counsel_review_recommended: boolean
   has_hierarchy_conflict: boolean
   is_pinned: boolean
+  meeting_session_id: string | null
   citations: Citation[]
+}
+
+interface MeetingSessionGroup {
+  id: string | null
+  title: string
+  session_date: string | null
+  entries: HistoryEntry[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -288,6 +296,7 @@ export default function HistoryPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [search, setSearch]         = useState('')
   const [filter, setFilter]         = useState<'all' | 'pinned'>('all')
+  const [groups, setGroups]         = useState<MeetingSessionGroup[]>([])
 
   useEffect(() => {
     async function load() {
@@ -313,34 +322,37 @@ export default function HistoryPage() {
         return
       }
 
-      const { data: sessions, error: sessionsError } = await supabase
-        .from('question_sessions')
+      // Fetch answers with session info directly from answers table
+      const { data: answersData, error: answersError } = await supabase
+        .from('answers')
         .select(`
           id,
-          question_text,
+          direct_answer,
+          plain_english_explanation,
+          confidence_level,
+          counsel_review_recommended,
+          has_hierarchy_conflict,
+          is_pinned,
+          session_id,
           created_at,
-          answers (
+          question_sessions (
             id,
-            direct_answer,
-            plain_english_explanation,
-            confidence_level,
-            counsel_review_recommended,
-            has_hierarchy_conflict,
-            is_pinned,
-            answer_citations (
-              id,
-              citation_order,
-              excerpt_text,
-              evidence_role,
-              document_sections (
-                citation_label,
-                heading,
-                page_start,
-                page_end,
-                documents (
-                  title,
-                  document_type
-                )
+            question_text,
+            created_at
+          ),
+          answer_citations (
+            id,
+            citation_order,
+            excerpt_text,
+            evidence_role,
+            document_sections (
+              citation_label,
+              heading,
+              page_start,
+              page_end,
+              documents (
+                title,
+                document_type
               )
             )
           )
@@ -348,46 +360,95 @@ export default function HistoryPage() {
         .eq('association_id', associationId)
         .order('created_at', { ascending: false })
 
-      if (sessionsError) {
-        console.error('History load error:', sessionsError)
+      if (answersError) {
+        console.error('History load error:', answersError)
         setError('Failed to load answer history.')
         setLoading(false)
         return
       }
 
-      const flat: HistoryEntry[] = (sessions ?? [])
-        .filter((s: any) => s.answers?.length > 0)
-        .map((s: any) => {
-          const a = s.answers[0]
-          return {
-            session_id: s.id,
-            question_text: s.question_text,
-            asked_at: s.created_at,
-            answer_id: a.id,
-            direct_answer: a.direct_answer,
-            plain_english_explanation: a.plain_english_explanation,
-            confidence_level: a.confidence_level,
-            counsel_review_recommended: a.counsel_review_recommended,
-            has_hierarchy_conflict: a.has_hierarchy_conflict,
-            is_pinned: a.is_pinned ?? false,
-            citations: (a.answer_citations ?? [])
-              .sort((x: any, y: any) => x.citation_order - y.citation_order)
-              .map((cit: any) => ({
-                id: cit.id,
-                citation_order: cit.citation_order,
-                excerpt_text: cit.excerpt_text,
-                evidence_role: cit.evidence_role,
-                citation_label: cit.document_sections?.citation_label ?? null,
-                heading: cit.document_sections?.heading ?? null,
-                page_start: cit.document_sections?.page_start ?? null,
-                page_end: cit.document_sections?.page_end ?? null,
-                document_title: cit.document_sections?.documents?.title ?? null,
-                document_type: cit.document_sections?.documents?.document_type ?? null,
-              })),
-          }
-        })
+      // Fetch meeting sessions for grouping
+      const { data: meetingSessions } = await supabase
+        .from('meeting_sessions')
+        .select('id, title, session_date, status')
+        .eq('association_id', associationId)
+        .order('session_date', { ascending: false })
+
+      const sessionMap = new Map<string, { title: string; session_date: string }>()
+      ;(meetingSessions ?? []).forEach((ms: any) => {
+        sessionMap.set(ms.id, { title: ms.title, session_date: ms.session_date })
+      })
+
+      // Flatten answers into HistoryEntry shape
+      const flat: HistoryEntry[] = (answersData ?? [])
+        .filter((a: any) => a.question_sessions)
+        .map((a: any) => ({
+          session_id: a.question_sessions.id,
+          question_text: a.question_sessions.question_text,
+          asked_at: a.question_sessions.created_at,
+          answer_id: a.id,
+          direct_answer: a.direct_answer,
+          plain_english_explanation: a.plain_english_explanation,
+          confidence_level: a.confidence_level,
+          counsel_review_recommended: a.counsel_review_recommended,
+          has_hierarchy_conflict: a.has_hierarchy_conflict,
+          is_pinned: a.is_pinned ?? false,
+          meeting_session_id: a.session_id ?? null,
+          citations: (a.answer_citations ?? [])
+            .sort((x: any, y: any) => x.citation_order - y.citation_order)
+            .map((cit: any) => ({
+              id: cit.id,
+              citation_order: cit.citation_order,
+              excerpt_text: cit.excerpt_text,
+              evidence_role: cit.evidence_role,
+              citation_label: cit.document_sections?.citation_label ?? null,
+              heading: cit.document_sections?.heading ?? null,
+              page_start: cit.document_sections?.page_start ?? null,
+              page_end: cit.document_sections?.page_end ?? null,
+              document_title: cit.document_sections?.documents?.title ?? null,
+              document_type: cit.document_sections?.documents?.document_type ?? null,
+            })),
+        }))
 
       setEntries(flat)
+
+      // Build groups
+      const groupMap = new Map<string | null, HistoryEntry[]>()
+      groupMap.set(null, []) // unsessioned bucket
+
+      flat.forEach(entry => {
+        const key = entry.meeting_session_id
+        if (!groupMap.has(key)) groupMap.set(key, [])
+        groupMap.get(key)!.push(entry)
+      })
+
+      const built: MeetingSessionGroup[] = []
+
+      // Named session groups first (newest first)
+      ;(meetingSessions ?? []).forEach((ms: any) => {
+        const entries = groupMap.get(ms.id) ?? []
+        if (entries.length > 0) {
+          built.push({
+            id: ms.id,
+            title: ms.title,
+            session_date: ms.session_date,
+            entries,
+          })
+        }
+      })
+
+      // Unsessioned at the bottom
+      const unsessioned = groupMap.get(null) ?? []
+      if (unsessioned.length > 0) {
+        built.push({
+          id: null,
+          title: 'Unsessioned',
+          session_date: null,
+          entries: unsessioned,
+        })
+      }
+
+      setGroups(built)
       setLoading(false)
     }
 
@@ -528,16 +589,50 @@ export default function HistoryPage() {
             </p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {visible.map(entry => (
-              <HistoryRow
-                key={entry.session_id}
-                entry={entry}
-                isExpanded={expandedId === entry.session_id}
-                onToggle={() => setExpandedId(expandedId === entry.session_id ? null : entry.session_id)}
-                onTogglePin={() => togglePin(entry)}
-              />
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+            {groups
+              .map(group => {
+                const groupVisible = group.entries
+                  .filter(e => filter === 'all' || e.is_pinned)
+                  .filter(e => !search.trim() || e.question_text.toLowerCase().includes(search.trim().toLowerCase()))
+                if (groupVisible.length === 0) return null
+                return (
+                  <div key={group.id ?? 'unsessioned'}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
+                      <h2 style={{
+                        margin: 0,
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: group.id ? c.text : c.textFaint,
+                        fontFamily: 'Instrument Sans, system-ui, sans-serif',
+                        letterSpacing: '0.02em',
+                      }}>
+                        {group.id ? '● ' : ''}{group.title}
+                      </h2>
+                      {group.session_date && (
+                        <span style={{ fontSize: 12, color: c.textFaint }}>
+                          {new Date(group.session_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 12, color: c.textFaint }}>
+                        {groupVisible.length} {groupVisible.length === 1 ? 'answer' : 'answers'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {groupVisible.map(entry => (
+                        <HistoryRow
+                          key={entry.session_id}
+                          entry={entry}
+                          isExpanded={expandedId === entry.session_id}
+                          onToggle={() => setExpandedId(expandedId === entry.session_id ? null : entry.session_id)}
+                          onTogglePin={() => togglePin(entry)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })
+            }
           </div>
         )}
 

@@ -4,26 +4,26 @@ import OpenAI from 'openai'
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 const DRAFT_PROMPTS: Record<string, string> = {
-  owner_response: `You are a professional HOA/condominium association manager drafting a formal written response to an owner inquiry. 
+  owner_response: `You are a professional HOA/condominium association manager drafting a formal written response to an owner inquiry.
 Write a clear, professional letter that:
-- Opens with a professional salutation (use "Dear Owner," if no name is provided)
+- Opens with a professional salutation using the recipient name provided (e.g. "Dear Jane Smith,")
 - States the board's or association's position based ONLY on the governing documents cited
 - References the specific document sections provided as authority
 - Uses firm but respectful tone
-- Closes professionally with a signature block placeholder
+- Ends with ONLY the word "Sincerely," on its own line — do not write any signature block, name, title, or association after it
 - Never invents authority not present in the citations
 - Flags any ambiguity from the source answer with appropriate hedging language`,
 
   violation_notice: `You are a professional HOA/condominium association manager drafting a formal violation notice.
 Write a clear, professional notice that:
 - Opens with a formal heading: NOTICE OF VIOLATION
+- Then the salutation using the recipient name provided (e.g. "Dear Jane Smith,")
 - Identifies the nature of the violation based on the governing documents cited
 - References the specific document sections that establish the rule or requirement
-- States what corrective action is required and implies a reasonable timeframe
+- States what corrective action is required and a reasonable timeframe
 - Uses firm, professional, non-threatening language
-- Closes with contact information placeholder
-- Never invents authority not present in the citations
-- Flags any ambiguity from the source answer`,
+- Ends with ONLY the word "Sincerely," on its own line — do not write any signature block, name, title, or association after it
+- Never invents authority not present in the citations`,
 
   board_notice: `You are a professional HOA/condominium association manager drafting a formal board notice to all residents.
 Write a clear, professional notice that:
@@ -31,7 +31,7 @@ Write a clear, professional notice that:
 - States the board's position or decision based on the governing documents cited
 - References the specific document sections that support the board's authority or position
 - Uses clear, accessible language appropriate for a general owner audience
-- Closes with a board signature block placeholder
+- Ends with ONLY the word "Sincerely," on its own line — do not write any signature block, name, title, or association after it
 - Never invents authority not present in the citations`,
 
   motion_language: `You are drafting formal motion language for an HOA/condominium board meeting.
@@ -39,8 +39,9 @@ Write motion language that:
 - Opens with: "MOTION:"
 - States the motion in precise, actionable terms grounded in the governing document authority cited
 - Follows with: "AUTHORITY:" and lists the specific document sections that authorize this action
-- Follows with: "WHEREAS" recitals if appropriate based on the context
+- Follows with: "WHEREAS" recitals if appropriate
 - Uses formal parliamentary language appropriate for board minutes
+- Does not include a signature block
 - Never invents authority not present in the citations
 - Flags if the cited documents suggest the board may lack clear authority for the proposed action`
 }
@@ -48,7 +49,7 @@ Write motion language that:
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { draft_type, question, answer, citations, signer } = body
+    const { draft_type, question, answer, citations, signer, owner } = body
 
     if (!draft_type || !question || !answer || !citations) {
       return NextResponse.json(
@@ -73,20 +74,24 @@ export async function POST(req: NextRequest) {
       .join('\n\n')
 
     const signerBlock = signer
-  ? `
-SIGNER INFORMATION (use in signature block):
+      ? `SIGNER INFORMATION (use in signature block):
 Name: ${signer.signerName || '[Name]'}
 Title: ${signer.signerTitle || '[Title]'}
 Association: ${signer.associationName || '[Association Name]'}
 ${signer.associationAddress ? `Address: ${signer.associationAddress}` : ''}
 ${signer.associationPhone ? `Phone: ${signer.associationPhone}` : ''}
-${signer.associationEmail ? `Email: ${signer.associationEmail}` : ''}
-`
-  : `
-SIGNER INFORMATION: Not provided. Use placeholder brackets for name, title, and association.
-`
+${signer.associationEmail ? `Email: ${signer.associationEmail}` : ''}`
+      : `SIGNER INFORMATION: Not provided. Use placeholder brackets for name, title, and association.`
 
-const userPrompt = `ORIGINAL QUESTION:
+    const ownerBlock = owner?.full_name
+      ? `RECIPIENT INFORMATION (use for salutation and address — do not use placeholders):
+Name: ${owner.full_name}
+${owner.unit ? `Unit: ${owner.unit}` : ''}
+${owner.mailing_address ? `Address: ${[owner.mailing_address, owner.city, owner.state, owner.zip].filter(Boolean).join(', ')}` : ''}
+${owner.email ? `Email: ${owner.email}` : ''}`
+      : `RECIPIENT: No specific owner selected. Use "Dear Homeowner," as salutation.`
+
+    const userPrompt = `ORIGINAL QUESTION:
 ${question}
 
 GOVERNING DOCUMENT ANSWER:
@@ -101,8 +106,12 @@ ${answer.counsel_recommended ? '\nNOTE: Legal counsel review has been recommende
 
 CITED GOVERNING DOCUMENT SECTIONS:
 ${citationBlock}
+
+${ownerBlock}
+
 ${signerBlock}
-Draft the appropriate document now. Do not add any preamble or explanation — output only the letter/notice/motion itself.`
+
+Draft the appropriate document now. Output only the letter/notice/motion itself — no preamble or explanation. Include salutation, body, and closing signature block. Do not use placeholder brackets for any information provided above.`
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
