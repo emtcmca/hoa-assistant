@@ -588,10 +588,12 @@ export default function DashboardPage() {
         {/* Coming Soon row */}
         <div style={comingSoonRowStyle}>
           <ComingSoonCard
+            href="/warnings"
             title="Warning Center"
             description="Flags parse quality issues, hierarchy conflicts, and corpus gaps across your document library."
           />
           <ComingSoonCard
+            href="/homeowners"
             title="Homeowner Roster"
             description="Upload owner data to auto-populate violation letters and board correspondence."
           />
@@ -666,37 +668,46 @@ function QuickAction({ href, title, description, primary, last }: { href: string
   )
 }
 
-function ComingSoonCard({ title, description }: { title: string; description: string }) {
+function ComingSoonCard({ title, description, href }: { title: string; description: string; href?: string }) {
   const cardStyle: React.CSSProperties = {
     background: '#FFFFFF',
     border: '1px solid rgba(26,37,53,0.08)',
     borderRadius: '8px',
     padding: '24px',
     boxShadow: '0 1px 4px rgba(26,37,53,0.05)',
-    opacity: 0.75,
+    opacity: href ? 1 : 0.75,
+    textDecoration: 'none',
+    display: 'block',
+    transition: 'box-shadow 0.15s',
   }
   const badgeStyle: React.CSSProperties = {
     display: 'inline-block',
     fontSize: '9px',
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
-    color: 'rgba(26,37,53,0.4)',
-    background: 'rgba(26,37,53,0.05)',
     borderRadius: '3px',
     padding: '3px 7px',
     fontWeight: 600,
     marginBottom: '10px',
     fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    color: href ? '#C4A054' : 'rgba(26,37,53,0.4)',
+    background: href ? 'rgba(196,160,84,0.10)' : 'rgba(26,37,53,0.05)',
   }
-  return (
-    <div style={cardStyle}>
-      <div style={badgeStyle}>Coming Soon</div>
-      <h3 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '20px', fontWeight: 400, color: '#1A2535', margin: '0 0 8px' }}>
-        {title}
-      </h3>
+  const inner = (
+    <>
+      <div style={badgeStyle}>{href ? 'Live' : 'Coming Soon'}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <h3 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '20px', fontWeight: 400, color: '#1A2535', margin: '0 0 8px' }}>
+          {title}
+        </h3>
+        {href && <span style={{ fontSize: '14px', color: '#C4A054', marginLeft: '12px', flexShrink: 0 }}>→</span>}
+      </div>
       <p style={{ fontSize: '13px', color: 'rgba(26,37,53,0.5)', margin: 0, lineHeight: 1.55, fontFamily: "'Instrument Sans', system-ui, sans-serif" }}>
         {description}
       </p>
-    </div>
+    </>
   )
+  return href
+    ? <a href={href} style={cardStyle}>{inner}</a>
+    : <div style={cardStyle}>{inner}</div>
 }

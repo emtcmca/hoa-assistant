@@ -14,6 +14,9 @@ interface ParsedSection {
   token_count: number
   page_start: number | null
   page_end: number | null
+  // v2 subsection fields — populated during extraction, resolved to FK after insert
+  parent_section_num: string | null
+  subsection_label: string | null
 }
 
 const LLAMA_CLOUD_API_KEY = process.env.LLAMA_CLOUD_API_KEY
@@ -75,7 +78,16 @@ function romanToArabic(roman: string): number {
 function normalizeArticleNum(raw: string): string {
   const t = raw.trim().toUpperCase()
   if (/^\d+$/.test(t)) return t
-  if (/^[IVXLCDM]+$/.test(t)) return String(romanToArabic(t))
+  if (/^[IVXLCDM]+$/.test(t)) {
+    const arabic = romanToArabic(t)
+    // Real HOA documents never have more than ~40 articles.
+    // If conversion yields an implausible number, the input is almost certainly
+    // a formatting artifact (e.g. LlamaParse emitting "CDXCIX" from a combined doc).
+    // Return the raw string so GPT can handle it contextually.
+    if (arabic > 0 && arabic <= 50) return String(arabic)
+    console.warn(`[Parser] Implausible Roman numeral "${t}" → ${arabic} — keeping as literal`)
+    return t
+  }
   return t
 }
 
@@ -307,31 +319,50 @@ async function extractSectionsFromChunk(
   articleNum: string,
   openaiApiKey: string
 ): Promise<ParsedSection[]> {
-  const prompt = `You are a legal document parser for HOA and condominium governing documents.
+const prompt = `You are a legal document parser for HOA and condominium governing documents.
 
-I will give you a portion of a legal governing document for an HOA or condominium association. This document may use ARTICLE headings, numbered sections, or plain paragraph numbering — any structure the original drafters chose. Your job is to extract each section as structured JSON.
+I will give you a portion of a legal governing document. Your job is to extract each section as structured JSON.
 
-Rules:
-- Extract ONLY substantive sections with real legal content
-- SKIP table of contents entries (lines that are just a heading + dots + page number)
-- SKIP recording stamps, county recorder headers, deed dates, developer addresses, attorney names, notary blocks, signature lines, exhibit markers, and compliance certificate forms
-- SKIP any line that is just a page number or section reference without body text
-- Each section must have meaningful body text (at least 1 sentence of legal content), EXCEPT definitions sections which must always be extracted regardless of length
-- Definitions sections include any section with a heading containing the words: Definitions, Defined Terms, Glossary, or any section whose content consists primarily of defined terms and their meanings
-'- If the document uses numbered paragraphs instead of named sections, treat each numbered paragraph as a section\n' +
-- Preserve the full body text of each section exactly as written — do not summarize
-- Section numbers should be in the format "X.Y" (e.g., "3.1", "7.13")
-- Article number should always be Arabic (e.g., 1, 2, 3 — not I, II, III)
+EXTRACTION RULES:
+- Extract ONLY sections with substantive legal content (at least one full sentence)
+- Exception: always extract Definitions sections regardless of length — any section headed "Definitions", "Defined Terms", or "Glossary", or whose content consists primarily of defined terms and meanings
+- If the document uses numbered paragraphs instead of named sections, treat each numbered paragraph as a section
+- Preserve the full body text of every section exactly as written — never summarize or paraphrase
 
-Return ONLY a JSON array. No explanation, no markdown, no code fences. Example format:
-[
-  {
-    "article_num": "3",
-    "section_num": "3.1",
-    "heading": "Section 3.1 - Utility Easements",
-    "body_text": "There is hereby reserved in favor of Developer..."
-  }
-]
+SKIP ALL OF THE FOLLOWING — return nothing for these:
+- Table of contents entries: any line that is just a heading followed by dots/dashes and a page number (e.g. "Section 3.1 ......... 12")
+- Recording stamps, county recorder headers, deed recording dates
+- Developer addresses, attorney names, notary blocks, signature lines
+- Exhibit markers, compliance certificate forms
+- Page numbers or bare section references with no body text
+
+NUMBERING RULES:
+- Article numbers must always be Arabic (1, 2, 3 — not I, II, III)
+- Section numbers must be in "X.Y" format (e.g. "3.1", "7.13")
+- Subsection numbers must be in "X.Y.Z" format (e.g. "3.1.1", "7.13.2")
+- For subsections labeled with letters like (a), (b), (c) — assign a numeric sub-number AND put the letter label in "subsection_label"
+
+HIERARCHY RULES:
+- For a top-level section (e.g. 3.1), set parent_section_num to null
+- For a subsection (e.g. 3.1.1 or paragraph (a) under 3.1), set parent_section_num to its parent's section_num
+- Never nest more than 3 levels deep
+
+Return ONLY a JSON array. No explanation, no markdown, no code fences.
+
+JSON schema — each element must have exactly these fields:
+{
+  "article_num": "3",
+  "section_num": "3.1",
+  "parent_section_num": null,
+  "subsection_label": null,
+  "heading": "Section 3.1 - Utility Easements",
+  "body_text": "There is hereby reserved in favor of Developer..."
+}
+
+Examples:
+- Top-level section: parent_section_num: null, subsection_label: null
+- Numeric subsection 3.1.1: parent_section_num: "3.1", subsection_label: null
+- Lettered subsection (a) under 3.1: section_num: "3.1.1", parent_section_num: "3.1", subsection_label: "(a)"
 
 If there are no valid sections in this chunk, return an empty array: []
 
@@ -360,11 +391,25 @@ ${chunk.text.substring(0, 12000)}`
   const data = await response.json()
   const raw = data.choices?.[0]?.message?.content ?? ''
 
-  let parsed: { article_num: string; section_num: string; heading: string; body_text: string }[]
+ let parsed: {
+    article_num: string
+    section_num: string
+    parent_section_num: string | null
+    subsection_label: string | null
+    heading: string
+    body_text: string
+  }[]
   try {
     // Strip any accidental markdown fences GPT adds despite instructions
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-    parsed = JSON.parse(cleaned)
+    parsed = JSON.parse(cleaned) as {
+      article_num: string
+      section_num: string
+      parent_section_num: string | null
+      subsection_label: string | null
+      heading: string
+      body_text: string
+    }[]
     if (!Array.isArray(parsed)) throw new Error('Not an array')
   } catch (e) {
     console.warn(`[Parser] Failed to parse GPT JSON for ${chunk.label}:`, raw.substring(0, 200))
@@ -376,6 +421,13 @@ ${chunk.text.substring(0, 12000)}`
     .map((s, idx): ParsedSection => {
       const artNum = normalizeArticleNum(s.article_num || articleNum)
       const secNum = s.section_num.trim()
+      const parentSecNum = s.parent_section_num?.trim() || null
+      const subsecLabel = s.subsection_label?.trim() || null
+
+      // Derive hierarchy depth from section number dot-depth
+      const dotCount = (secNum.match(/\./g) || []).length
+      const hierarchyDepth = dotCount + 1  // "3.1" → 2 dots=1 → depth 2; "3.1.1" → dots=2 → depth 3
+
       const alphaRatio = (s.body_text.match(/[a-zA-Z]/g) || []).length / s.body_text.length
       let confidence = 1.0
       if (alphaRatio < 0.6) confidence -= 0.2
@@ -386,15 +438,17 @@ ${chunk.text.substring(0, 12000)}`
         section_number: secNum,
         heading: s.heading.trim(),
         body_text: s.body_text.trim(),
-        sequence_index: 0, // will be assigned after all chunks merge
-        hierarchy_depth: 2,
+        sequence_index: 0,
+        hierarchy_depth: hierarchyDepth,
         citation_label: `Art. ${artNum}, § ${secNum}`,
         parser_confidence: Math.max(0.5, confidence),
         token_count: Math.ceil(s.body_text.length / 4),
         page_start: null,
         page_end: null,
+        parent_section_num: parentSecNum,
+        subsection_label: subsecLabel,
       }
-    })
+  })
 }
 
 // ─── Main entry point (replaces old parseSectionsFromMarkdown) ────────────────
@@ -422,6 +476,8 @@ async function parseSectionsFromMarkdown(
       token_count: Math.ceil(markdown.length / 4),
       page_start: null,
       page_end: null,
+      parent_section_num: null,
+      subsection_label: null,
     }]
   }
 
@@ -437,20 +493,21 @@ async function parseSectionsFromMarkdown(
   }
 
   // Deduplicate: keep only the first occurrence of each section_number per article
-const seen = new Set<string>()
-const dedupedSections = allSections.filter(s => {
-  const key = s.citation_label
-  if (seen.has(key)) return false
-  seen.add(key)
-  return true
-})
-dedupedSections.forEach((s, i) => { s.sequence_index = i })
+// Deduplicate by citation_label — keep first occurrence
+  const seen = new Set<string>()
+  const dedupedSections = allSections.filter(s => {
+    const key = s.citation_label
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 
-  // Assign final sequential indexes
-  allSections.forEach((s, i) => { s.sequence_index = i })
+  // Assign sequence index on dedupedSections only
+  // (second allSections.forEach was a bug — same object refs get overwritten)
+  dedupedSections.forEach((s, i) => { s.sequence_index = i })
 
-  console.log(`[Parser] Total: ${dedupedSections.length} sections (${allSections.length - dedupedSections.length} duplicates removed) across ${chunks.length} articles`)
-return dedupedSections
+  console.log(`[Parser] Total: ${dedupedSections.length} sections (${allSections.length - dedupedSections.length} [Parser] WARNING: Duplicate article labels detected — this may be a combined document (CC&Rs + Bylaws in one PDF). Consider splitting into separate uploads for accurate citation.) across ${chunks.length} articles`)
+  return dedupedSections
 }
 
 export async function POST(request: NextRequest) {
@@ -551,6 +608,8 @@ const extraction = await extractTextWithFallback(fileBuffer, filename, documentI
       token_count: s.token_count,
       page_start: s.page_start,
       page_end: s.page_end,
+      subsection_label: s.subsection_label,
+      // parent_section_id resolved in a second pass after all rows are inserted
     }))
 
     const batchSize = 50
@@ -624,7 +683,46 @@ const extraction = await extractTextWithFallback(fileBuffer, filename, documentI
     }
     // --- END AUTO-EMBEDDINGS ---
     }
+// ─── Parent section ID resolution pass ───────────────────────────────────
+    // Now that all sections are in the DB, resolve parent_section_num → parent_section_id FK
+    const sectionsNeedingParent = parsedSections.filter(s => s.parent_section_num !== null)
 
+    if (sectionsNeedingParent.length > 0) {
+      console.log(`[Parser] Resolving parent IDs for ${sectionsNeedingParent.length} subsections...`)
+
+      // Fetch all inserted sections for this document to build section_number → id map
+      const { data: insertedRows, error: fetchParentError } = await supabase
+        .from('document_sections')
+        .select('id, section_number')
+        .eq('document_id', documentId)
+
+      if (fetchParentError || !insertedRows) {
+        console.error('[Parser] Could not fetch sections for parent resolution:', fetchParentError)
+        // Non-fatal — subsections stored flat, parent IDs backfillable later
+      } else {
+        const sectionNumToId = new Map<string, string>()
+        insertedRows.forEach(row => sectionNumToId.set(row.section_number, row.id))
+
+        for (const section of sectionsNeedingParent) {
+          const parentId = sectionNumToId.get(section.parent_section_num!)
+          if (!parentId) {
+            console.warn(`[Parser] No parent found for section ${section.section_number} (parent_section_num: ${section.parent_section_num})`)
+            continue
+          }
+          const { error: parentUpdateError } = await supabase
+            .from('document_sections')
+            .update({ parent_section_id: parentId })
+            .eq('document_id', documentId)
+            .eq('section_number', section.section_number)
+
+          if (parentUpdateError) {
+            console.warn(`[Parser] Parent update failed for section ${section.section_number}:`, parentUpdateError)
+          }
+        }
+        console.log(`[Parser] Parent ID resolution complete`)
+      }
+    }
+    // ─── End parent resolution ────────────────────────────────────────────────
     const finalStatus = warningCount > 0 ? 'warning' : 'indexed'
     await supabase
       .from('documents')

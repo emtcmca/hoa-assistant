@@ -1,0 +1,19 @@
+﻿# Project: hoa-assistant (BoardPath)
+# Agents working here may only access files within this project folder.
+
+allowed_paths:
+  - ./src
+  - ./tests
+  - ./docs
+  - ./public
+  - ./_assets
+
+denied_paths:
+  - ../
+  - ./node_modules
+  - ./.env
+
+notes:
+  _assets/ contains sanitized example documents and mockups only.
+  No real client data, owner names, or financial records belong here.
+  All .env files are off limits regardless of content.

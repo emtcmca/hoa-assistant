@@ -21,6 +21,9 @@ const C = {
   warning:     '#D97706',
   warningBg:   '#FFFBEB',
   success:     '#40916C',
+  amendment:   '#6366F1',
+  amendmentBg: 'rgba(99,102,241,0.08)',
+  amendmentBorder: 'rgba(99,102,241,0.25)',
 }
 
 const DOCUMENT_TYPES = [
@@ -69,6 +72,22 @@ function TypePill({ type }: { type: string }) {
   return <span style={pillStyle}>{typeLabel(type)}</span>
 }
 
+function AmendmentPill({ direction, docTitle }: { direction: 'amends' | 'amended-by'; docTitle: string }) {
+  const label = direction === 'amends'
+    ? `↑ Amends: ${docTitle}`
+    : `↓ Amended by: ${docTitle}`
+  const pillStyle: React.CSSProperties = {
+    fontSize: 11, fontWeight: 600,
+    color: C.amendment,
+    backgroundColor: C.amendmentBg,
+    border: `1px solid ${C.amendmentBorder}`,
+    borderRadius: 4, padding: '2px 8px',
+    letterSpacing: '0.03em', whiteSpace: 'nowrap',
+    maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis',
+  }
+  return <span style={pillStyle} title={label}>{label}</span>
+}
+
 type Document = {
   id: string
   title: string
@@ -79,6 +98,8 @@ type Document = {
   effective_date: string | null
   parser_warning_count: number
   created_at: string
+  amends_document_id: string | null
+  authority_rank: number | null
 }
 
 type ParsePhase = 'uploading' | 'extracting' | 'complete' | 'error'
@@ -135,22 +156,20 @@ export default function DocumentsPage() {
   }
 
   async function handleDeleteDoc(docId: string) {
-  setDeletingId(docId)
-  const { error } = await supabase
-    .from('documents')
-    .update({ document_status: 'inactive' })
-    .eq('id', docId)
-  
-  if (error) {
-    console.error('[handleDeleteDoc] Update failed:', error)
-  } else {
-    console.log('[handleDeleteDoc] Update succeeded for:', docId)
+    setDeletingId(docId)
+    const { error } = await supabase
+      .from('documents')
+      .update({ document_status: 'inactive' })
+      .eq('id', docId)
+    if (error) {
+      console.error('[handleDeleteDoc] Update failed:', error)
+    } else {
+      console.log('[handleDeleteDoc] Update succeeded for:', docId)
+    }
+    setDocuments(prev => prev.filter(d => d.id !== docId))
+    setConfirmDeleteId(null)
+    setDeletingId(null)
   }
-
-  setDocuments(prev => prev.filter(d => d.id !== docId))
-  setConfirmDeleteId(null)
-  setDeletingId(null)
-}
 
   function closeModal() {
     setModalOpen(false)
@@ -221,6 +240,20 @@ export default function DocumentsPage() {
     }
 
     setFile(null); setTitle(''); setDocType('declaration'); setEffectiveDate('')
+  }
+
+  // Build relationship lookup maps from the documents already in state.
+  // titleById: id → title (used to label what an amendment points to)
+  // amendedByMap: parentId → array of amendment titles (used to label the parent)
+  const titleById: Record<string, string> = {}
+  for (const doc of documents) { titleById[doc.id] = doc.title }
+
+  const amendedByMap: Record<string, string[]> = {}
+  for (const doc of documents) {
+    if (doc.amends_document_id) {
+      if (!amendedByMap[doc.amends_document_id]) amendedByMap[doc.amends_document_id] = []
+      amendedByMap[doc.amends_document_id].push(doc.title)
+    }
   }
 
   const indexedCount = documents.filter(d =>
@@ -391,6 +424,10 @@ export default function DocumentsPage() {
               const isConfirming = confirmDeleteId === doc.id
               const isDeleting   = deletingId === doc.id
 
+              // Relationship data for this row
+              const parentTitle    = doc.amends_document_id ? titleById[doc.amends_document_id] : null
+              const amendedByTitles = amendedByMap[doc.id] ?? []
+
               const rowStyle: React.CSSProperties = {
                 backgroundColor: C.surface,
                 border: `1px solid ${isConfirming ? 'rgba(220,38,38,0.15)' : C.border}`,
@@ -413,6 +450,12 @@ export default function DocumentsPage() {
                           {doc.title}
                         </Link>
                         <TypePill type={doc.document_type} />
+                        {parentTitle && (
+                          <AmendmentPill direction="amends" docTitle={parentTitle} />
+                        )}
+                        {amendedByTitles.map(t => (
+                          <AmendmentPill key={t} direction="amended-by" docTitle={t} />
+                        ))}
                       </div>
                       <div style={{ fontSize: 12, color: C.muted, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span>{doc.original_filename}</span>
